@@ -20,7 +20,7 @@
 >1.设置GPU虚拟化(不同GPU类型驱动路径不同)
 >>需要先查询是否支持GPU虚拟化
 >>1.虚拟机名称
->>2.内存最大,最小值
+>>2.内存最大,最小值,GPU型号
 >>
 >2.实体机GPU驱动更新时自动更新虚拟机GPU驱动
 
@@ -39,7 +39,7 @@
 
 四.关于本项目
 >项目链接(GitHub)
->[https://github.com/yourusername/Hyper-v_tools](https://github.com/yourusername/Hyper-v_tools)
+>[https://github.com/yourusername/Hyper-v_tools]()
 
 ## 虚拟机:
 #### 功能:
@@ -57,4 +57,4 @@
 
 四.关于本项目
 >项目链接(GitHub)
->[https://github.com/yourusername/Hyper-v_tools](https://github.com/yourusername/Hyper-v_tools)
+>[https://github.com/yourusername/Hyper-v_tools]()
