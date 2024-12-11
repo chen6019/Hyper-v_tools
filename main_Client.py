@@ -1,12 +1,38 @@
 import tkinter as tk
 from tkinter import messagebox
+import subprocess
+import os
+import logging
+import threading
 
-
-
-# 查看虚拟机状态
 def show_vm_status():
-    # TODO: 获取并显示虚拟机的运行状态（名称、CPU、内存占用等），需另启线程
-    pass
+    # PowerShell 命令获取虚拟机状态
+    ps_command = "Get-VM | Select-Object Name, State | Format-Table -AutoSize"
+    
+    # 调用 PowerShell 命令
+    result = subprocess.run(["powershell", "-Command", ps_command], capture_output=True, text=True)
+    
+    # 返回结果
+    return result.stdout
+
+def refresh_vm_status():
+    def task():
+        vm_status = show_vm_status()
+        names, states = parse_vm_status(vm_status)
+        name_label.config(text=names)
+        state_label.config(text=states)
+    
+    threading.Thread(target=task).start()
+
+def parse_vm_status(vm_status):
+    lines = vm_status.strip().split('\n')
+    names = []
+    states = []
+    for line in lines[2:]:  # 跳过前两行表头
+        parts = line.split()
+        names.append(parts[0])
+        states.append(parts[1])
+    return '\n'.join(names), '\n'.join(states)
 
 # 开启和关闭虚拟机
 def start_vm():
@@ -32,7 +58,6 @@ def disable_gpu_virtualization():
     # TODO: 关闭 GPU 虚拟化
     pass
 
-
 # 打开虚拟磁盘编辑器
 def open_disk_editor():
     # TODO: 打开系统自带的虚拟磁盘编辑器
@@ -43,13 +68,52 @@ def open_settings():
     # TODO: 打开设置界面
     pass
 
+# 打开配置文件夹的函数
+def open_config_folder():
+    os.startfile(appdata_path)
+
+# 日志和配置文件路径处理
+appdata_path = os.path.join(
+    os.path.expanduser("~"), "AppData", "Roaming", "Hyper-V_tools"
+)
+
+# 如果目录不存在则创建
+if not os.path.exists(appdata_path):
+    os.makedirs(appdata_path)
+
+log_path = os.path.join(appdata_path, "log.txt")
+logging.basicConfig(
+    filename=log_path,
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s: %(message)s",
+    datefmt="%m/%d/%Y %I:%M:%S %p",
+)
 
 # 创建主窗口
 root = tk.Tk()
 root.title("Hyper-V 管理工具")
 status_frame = tk.Frame(root)
 status_frame.pack(fill=tk.BOTH, expand=True)
-show_vm_status()
+root.wm_minsize(350, 450)  # 将宽度设置为600，高度设置为600
+
+# 获取虚拟机状态并显示在标签中
+vm_status = show_vm_status()
+names, states = parse_vm_status(vm_status)
+name_label = tk.Label(status_frame, text=names, justify=tk.LEFT, anchor="w")
+name_label.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+state_label = tk.Label(status_frame, text=states, justify=tk.LEFT, anchor="w")
+state_label.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+refresh_button = tk.Button(status_frame, text="刷新", command=refresh_vm_status)
+refresh_button.pack()
+
+# 添加输入框和标签
+input_frame = tk.Frame(root)
+input_frame.pack(pady=10)
+input_label = tk.Label(input_frame, text="虚拟机名称:")
+input_label.pack(side=tk.LEFT)
+vm_name_entry = tk.Entry(input_frame)
+vm_name_entry.pack(side=tk.LEFT)
 
 control_frame = tk.Frame(root)
 control_frame.pack()
