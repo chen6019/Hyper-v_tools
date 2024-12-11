@@ -19,8 +19,7 @@ def refresh_vm_status():
     def task():
         vm_status = show_vm_status()
         names, states = parse_vm_status(vm_status)
-        name_label.config(text=names)
-        state_label.config(text=states)
+        update_vm_list(names, states)
     
     threading.Thread(target=task).start()
 
@@ -32,7 +31,12 @@ def parse_vm_status(vm_status):
         parts = line.split()
         names.append(parts[0])
         states.append(parts[1])
-    return '\n'.join(names), '\n'.join(states)
+    return names, states
+
+def update_vm_list(names, states):
+    vm_list.delete(0, tk.END)
+    for name, state in zip(names, states):
+        vm_list.insert(tk.END, f"{name}: {state}")
 
 # 开启和关闭虚拟机
 def start_vm():
@@ -94,18 +98,24 @@ root = tk.Tk()
 root.title("Hyper-V 管理工具")
 status_frame = tk.Frame(root)
 status_frame.pack(fill=tk.BOTH, expand=True)
-root.wm_minsize(350, 450)  # 将宽度设置为600，高度设置为600
+root.wm_minsize(350, 650)  # 将宽度设置为600，高度设置为600
 
-# 获取虚拟机状态并显示在标签中
+# 添加提示标签
+name_hint_label = tk.Label(status_frame, text="名称:    状态", justify=tk.LEFT, anchor="nw")
+name_hint_label.grid(row=0, column=0, sticky="w")
+
+# 创建虚拟机状态列表框
+vm_list = tk.Listbox(status_frame)
+vm_list.grid(row=1, column=0, rowspan=4, pady=10, sticky="nsew")
+
+# 添加刷新按钮
+refresh_button = tk.Button(status_frame, text="刷新", command=refresh_vm_status)
+refresh_button.grid(row=0, column=1, sticky="w")
+
+# 获取虚拟机状态并显示在列表框中
 vm_status = show_vm_status()
 names, states = parse_vm_status(vm_status)
-name_label = tk.Label(status_frame, text=names, justify=tk.LEFT, anchor="w")
-name_label.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-state_label = tk.Label(status_frame, text=states, justify=tk.LEFT, anchor="w")
-state_label.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-
-refresh_button = tk.Button(status_frame, text="刷新", command=refresh_vm_status)
-refresh_button.pack()
+update_vm_list(names, states)
 
 # 添加输入框和标签
 input_frame = tk.Frame(root)
