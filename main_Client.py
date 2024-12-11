@@ -1,9 +1,12 @@
+import ctypes
+import sys
 import tkinter as tk
 from tkinter import messagebox
 import subprocess
 import os
 import logging
 import threading
+import win32com.client
 
 def show_vm_status():
     # PowerShell 命令获取虚拟机状态
@@ -21,13 +24,13 @@ def refresh_vm_status():
         names, states = parse_vm_status(vm_status)
         update_vm_list(names, states)
     
-    threading.Thread(target=task).start()
+    run_in_thread(task)
 
 def parse_vm_status(vm_status):
     lines = vm_status.strip().split('\n')
     names = []
     states = []
-    for line in lines[2:]:  # 跳过前两行表头
+    for line in lines[2:]:
         parts = line.split()
         names.append(parts[0])
         states.append(parts[1])
@@ -36,21 +39,102 @@ def parse_vm_status(vm_status):
 def update_vm_list(names, states):
     vm_list.delete(0, tk.END)
     for name, state in zip(names, states):
-        vm_list.insert(tk.END, f"{name}: {state}")
+        display_text = f"{name} {state}"
+        vm_list.insert(tk.END, display_text)
 
-# 开启和关闭虚拟机
+# 定义启动虚拟机的工作函数
+def start_vm_process(vm_name):
+    try:
+        subprocess.run(["PowerShell", "Start-VM", "-Name", vm_name], check=True)
+        logging.info(f"虚拟机 {vm_name} 已启动。")
+    except subprocess.CalledProcessError as e:
+        logging.error(f"启动虚拟机 {vm_name} 失败: {e}")
+
+# 定义关闭虚拟机的工作函数
+def stop_vm_process(vm_name):
+    try:
+        # 使用 PowerShell 强制关闭虚拟机
+        subprocess.run(["powershell", "-Command", f"Stop-VM -Name '{vm_name}' -Force"], check=True)
+        logging.info(f"虚拟机 {vm_name} 已强制关闭。")
+    except subprocess.CalledProcessError as e:
+        logging.error(f"强制关闭虚拟机 {vm_name} 失败: {e}")
+        messagebox.showerror("错误", f"强制关闭虚拟机 {vm_name} 失败。\n{e}")
+
+# 修改 start_vm 函数
 def start_vm():
-    # TODO: 启动虚拟机
-    pass
+    selected = vm_list.curselection()
+    if not selected:
+        messagebox.showwarning("警告", "请选择一个虚拟机。")
+        return
+    display_text = vm_list.get(selected[0])
+    vm_name = display_text.split(" ", 1)[0]  # 获取名称部分
+    
+    run_in_thread(start_vm_process, vm_name)
+    
+    messagebox.showinfo("启动中", f"虚拟机 {vm_name} 正在启动。")
+    refresh_vm_status()
 
+# 修改 stop_vm 函数
 def stop_vm():
-    # TODO: 关闭虚拟机
-    pass
+    selected = vm_list.curselection()
+    if not selected:
+        messagebox.showwarning("警告", "请选择一个虚拟机。")
+        return
+    display_text = vm_list.get(selected[0])
+    vm_name = display_text.split(" ", 1)[0]  # 获取名称部分
 
-# 打开虚拟机设置
-def open_vm_settings():
-    # TODO: 打开系统自带的虚拟机设置界面
-    pass
+    # 弹出确认对话框
+    confirm = messagebox.askyesno("确认", f"确定要强制关闭虚拟机 {vm_name} 吗？")
+    if not confirm:
+        return
+    stop_vm_process(vm_name)
+    messagebox.showinfo("关闭中", f"虚拟机 {vm_name} 正在强制关闭。")
+    refresh_vm_status()
+
+# 打开虚拟机远程连接
+def open_vm_connect():
+    selected = vm_list.curselection()
+    if not selected:
+        messagebox.showwarning("警告", "请选择一个虚拟机。")
+        return
+    display_text = vm_list.get(selected[0])
+    vm_name = display_text.split(" ", 1)[0]  # 获取名称部分
+
+    try:
+        # 使用 vmconnect.exe 打开特定虚拟机的远程连接界面
+        subprocess.run(["vmconnect.exe", "localhost", vm_name], check=True)
+        logging.info(f"已打开虚拟机 {vm_name} 的远程连接界面。")
+    except subprocess.CalledProcessError as e:
+        logging.error(f"无法打开虚拟机 {vm_name} 的远程连接界面: {e}")
+        messagebox.showerror("错误", f"无法打开虚拟机 {vm_name} 的远程连接界面。\n{e}")
+
+def open_hyper_v_manager():
+    try:
+        shell = win32com.client.Dispatch("WScript.Shell")
+        shell.Run("mmc virtmgmt.msc")
+        logging.info("已打开 Hyper-V 管理器。")
+    except subprocess.CalledProcessError as e:
+        logging.error(f"无法打开 Hyper-V 管理器: {e}")
+        messagebox.showerror("错误", "无法打开 Hyper-V 管理器。")
+
+def run_in_thread(target, *args):
+    thread = threading.Thread(target=target, args=args)
+    thread.start()
+
+# 判断是否拥有管理员权限
+def is_admin():
+    try:
+        return ctypes.windll.shell32.IsUserAnAdmin()
+    except Exception:
+        return False
+    
+# 获取管理员权限
+def get_administrator_privileges():
+    messagebox.showinfo("提示！", "将以管理员权限重新运行！！")
+    ctypes.windll.shell32.ShellExecuteW(
+        None, "runas", sys.executable, f'"{__file__}"', None, 0
+    )
+    sys.exit()
 
 # 设置 GPU 虚拟化
 def set_gpu_virtualization():
@@ -60,11 +144,6 @@ def set_gpu_virtualization():
 # 关闭 GPU 虚拟化
 def disable_gpu_virtualization():
     # TODO: 关闭 GPU 虚拟化
-    pass
-
-# 打开虚拟磁盘编辑器
-def open_disk_editor():
-    # TODO: 打开系统自带的虚拟磁盘编辑器
     pass
 
 # 设置界面
@@ -97,60 +176,47 @@ logging.basicConfig(
 root = tk.Tk()
 root.title("Hyper-V 管理工具")
 status_frame = tk.Frame(root)
-status_frame.pack(fill=tk.BOTH, expand=True)
-root.wm_minsize(350, 650)  # 将宽度设置为600，高度设置为600
+root.wm_minsize(400, 400)  # 将宽度设置为600，高度设置为600
+
+# 创建状态框架
+status_frame = tk.Frame(root)
+status_frame.pack(fill=tk.BOTH, expand=True, padx=15)  # 左边空出15db左右的空间
 
 # 添加提示标签
-name_hint_label = tk.Label(status_frame, text="名称:    状态", justify=tk.LEFT, anchor="nw")
+name_hint_label = tk.Label(status_frame, text="名称:", justify=tk.LEFT, anchor="nw")
 name_hint_label.grid(row=0, column=0, sticky="w")
+name_hint_label = tk.Label(status_frame, text="状态", justify=tk.LEFT, anchor="nw")
+name_hint_label.grid(row=0, column=0, sticky="e")
 
 # 创建虚拟机状态列表框
 vm_list = tk.Listbox(status_frame)
-vm_list.grid(row=1, column=0, rowspan=4, pady=10, sticky="nsew")
+vm_list.grid(row=1, column=0, rowspan=4, sticky="nsew")
 
 # 添加刷新按钮
-refresh_button = tk.Button(status_frame, text="刷新", command=refresh_vm_status)
-refresh_button.grid(row=0, column=1, sticky="w")
+refresh_button = tk.Button(status_frame, text="刷新", command=lambda:run_in_thread(refresh_vm_status))
+refresh_button.grid(row=5, column=0)
 
 # 获取虚拟机状态并显示在列表框中
 vm_status = show_vm_status()
 names, states = parse_vm_status(vm_status)
 update_vm_list(names, states)
 
-# 添加输入框和标签
-input_frame = tk.Frame(root)
-input_frame.pack(pady=10)
-input_label = tk.Label(input_frame, text="虚拟机名称:")
-input_label.pack(side=tk.LEFT)
-vm_name_entry = tk.Entry(input_frame)
-vm_name_entry.pack(side=tk.LEFT)
+# 添加启动和关闭按钮到 status_frame 中
+start_button = tk.Button(status_frame, text="启动", command=lambda:run_in_thread(start_vm))
+start_button.grid(row=5, column=0, padx=5, pady=5, sticky="w")
 
-control_frame = tk.Frame(root)
-control_frame.pack()
+stop_button = tk.Button(status_frame, text="关闭", command=lambda:run_in_thread(stop_vm))
+stop_button.grid(row=5, column=0, padx=5, pady=5, sticky="e")
 
-start_button = tk.Button(control_frame, text="启动虚拟机", command=start_vm)
-start_button.grid(row=0, column=0, padx=5, pady=5)
+# 添加设置和关闭 GPU 虚拟化按钮到 status_frame 中
+set_gpu_button = tk.Button(status_frame, text="GPU 虚拟化", command=set_gpu_virtualization)
+set_gpu_button.grid(row=1, column=1, padx=5, pady=5, sticky="e")
 
-stop_button = tk.Button(control_frame, text="关闭虚拟机", command=stop_vm)
-stop_button.grid(row=0, column=1, padx=5, pady=5)
+Remote_connection_button = tk.Button(status_frame, text="打开远程连接", command=lambda:run_in_thread(open_vm_connect))
+Remote_connection_button.grid(row=2, column=1, padx=5, pady=5, sticky="e")
 
-settings_button = tk.Button(root, text="打开虚拟机设置", command=open_vm_settings)
+settings_button = tk.Button(root, text="打开Hyper-V管理器", command=lambda: run_in_thread(open_hyper_v_manager))
 settings_button.pack(padx=5, pady=5)
-
-set_gpu_button = tk.Button(root, text="设置 GPU 虚拟化", command=set_gpu_virtualization)
-set_gpu_button.pack(padx=5, pady=5)
-
-disable_gpu_button = tk.Button(root, text="关闭 GPU 虚拟化", command=disable_gpu_virtualization)
-disable_gpu_button.pack(padx=5, pady=5)
-
-disk_editor_button = tk.Button(root, text="打开虚拟磁盘编辑器", command=open_disk_editor)
-disk_editor_button.pack(padx=5, pady=5)
-
-menubar = tk.Menu(root)
-settings_menu = tk.Menu(menubar, tearoff=0)
-settings_menu.add_command(label="设置", command=open_settings)
-menubar.add_cascade(label="选项", menu=settings_menu)
-root.config(menu=menubar)
 
 # 主循环
 root.mainloop()
