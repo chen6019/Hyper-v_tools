@@ -8,6 +8,15 @@ import logging
 import threading
 import win32com.client
 
+# 设置窗口居中
+def center_window(window):
+    window.update_idletasks()
+    width = window.winfo_width()
+    height = window.winfo_height()
+    x = (window.winfo_screenwidth() // 2) - (width // 2)
+    y = (window.winfo_screenheight() // 2) - (height // 2)
+    window.geometry(f"{width}x{height}+{x}+{y}")
+
 def show_vm_status():
     # PowerShell 命令获取虚拟机状态
     ps_command = "Get-VM | Select-Object Name, State | Format-Table -AutoSize"
@@ -116,6 +125,9 @@ def open_hyper_v_manager():
     except subprocess.CalledProcessError as e:
         logging.error(f"无法打开 Hyper-V 管理器: {e}")
         messagebox.showerror("错误", "无法打开 Hyper-V 管理器。")
+    except Exception as e:
+        logging.error(f"无法打开 Hyper-V 管理器: {e}")
+        messagebox.showerror("错误", "无法打开 Hyper-V 管理器。\n请确保已开启 Hyper-V。")
 
 def run_in_thread(target, *args):
     thread = threading.Thread(target=target, args=args)
@@ -130,26 +142,100 @@ def is_admin():
     
 # 获取管理员权限
 def get_administrator_privileges():
-    messagebox.showinfo("提示！", "将以管理员权限重新运行！！")
-    ctypes.windll.shell32.ShellExecuteW(
-        None, "runas", sys.executable, f'"{__file__}"', None, 0
-    )
-    sys.exit()
+    confirm = messagebox.askyesno("确认", "您确定要以管理员权限重新运行吗？")
+    if confirm:
+        ctypes.windll.shell32.ShellExecuteW(None,"runas", sys.executable, __file__, None, 1)
+        exit()
+
+# 查看GPU虚拟化状态
+def check_gpu_virtualization_status():
+    selected = vm_list.curselection()
+    if not selected:
+        return False
+    display_text = vm_list.get(selected[0])
+    vm = display_text.split(" ", 1)[0]  
+    try:
+        # PowerShell 命令
+        command = f'powershell.exe Get-VMGpuPartitionAdapter -VMName {vm}'
+        result = subprocess.run(command, capture_output=True, text=True, shell=True)
+        
+        if result.returncode != 0:
+            raise Exception(result.stderr)
+        
+        status = result.stdout.strip()
+        # 解析输出并提取值
+        gpu_info = {}
+        for line in status.splitlines():
+            if ':' in line:
+                key, value = line.split(':', 1)
+                gpu_info[key.strip()] = value.strip()
+        
+        logging.info(f"获取的 GPU 虚拟化状态: {gpu_info}")
+        return gpu_info
+    except Exception as e:
+        logging.error(f"获取 GPU 虚拟化状态失败: {e}")
+        return None
 
 # 设置 GPU 虚拟化
 def set_gpu_virtualization():
-    # TODO: 设置 GPU 虚拟化参数
-    pass
+    gpu_info = check_gpu_virtualization_status()
+    if gpu_info is False:
+        messagebox.showwarning("警告", "请选择一个虚拟机。")
+        return
+    elif gpu_info is None:
+        messagebox.showerror("错误", "无法获取 GPU 虚拟化状态。")
+        return
+    GPU_window = tk.Toplevel(root)
+    GPU_window.title("GPU虚拟化")
+    GPU_window.resizable(False, False)
 
-# 关闭 GPU 虚拟化
-def disable_gpu_virtualization():
-    # TODO: 关闭 GPU 虚拟化
-    pass
+    # 创建标签和输入框
+    tk.Label(GPU_window, text="MinPartitionVRAM：").grid(row=0, column=0, sticky="e")
+    min_vram_var = tk.StringVar(value=gpu_info.get("MinPartitionVRAM", ""))
+    tk.Entry(GPU_window, textvariable=min_vram_var).grid(row=0, column=1, sticky="w")
 
-# 设置界面
-def open_settings():
-    # TODO: 打开设置界面
-    pass
+    tk.Label(GPU_window, text="MaxPartitionVRAM：").grid(row=1, column=0, sticky="e")
+    max_vram_var = tk.StringVar(value=gpu_info.get("MaxPartitionVRAM", ""))
+    tk.Entry(GPU_window, textvariable=max_vram_var).grid(row=1, column=1, sticky="w")
+
+    tk.Label(GPU_window, text="OptimalPartitionVRAM：").grid(row=2, column=0, sticky="e")
+    optimal_vram_var = tk.StringVar(value=gpu_info.get("OptimalPartitionVRAM", ""))
+    tk.Entry(GPU_window, textvariable=optimal_vram_var).grid(row=2, column=1, sticky="w")
+
+    # 保存和取消按钮
+    def save_gpu_settings():
+        selected = vm_list.curselection()
+        if not selected:
+            messagebox.showwarning("警告", "请选择一个虚拟机。")
+            return
+        display_text = vm_list.get(selected[0])
+        vm_name = display_text.split(" ", 1)[0]
+        min_vram = min_vram_var.get()
+        max_vram = max_vram_var.get()
+        optimal_vram = optimal_vram_var.get()
+        # 获取其他参数的值
+
+        try:
+            # 构建 PowerShell 命令
+            ps_command = f'Set-VMGpuPartitionAdapter -VMName "{vm_name}" -MinPartitionVRAM {min_vram} -MaxPartitionVRAM {max_vram} -OptimalPartitionVRAM {optimal_vram}'
+            # 执行 PowerShell 命令
+            subprocess.run(["powershell.exe", ps_command], check=True)
+            messagebox.showinfo("成功", "GPU 虚拟化设置已保存。")
+            GPU_window.destroy()
+        except Exception as e:
+            messagebox.showerror("错误", f"设置 GPU 虚拟化失败：{e}")
+
+    def cancel():
+        GPU_window.destroy()
+
+    tk.Button(GPU_window, text="保存", command=save_gpu_settings).grid(row=3, column=0, pady=15)
+    tk.Button(GPU_window, text="取消", command=cancel).grid(row=3, column=1)
+
+    center_window(GPU_window)
+
+def exit():
+    root.destroy()
+    sys.exit()
 
 # 打开配置文件夹的函数
 def open_config_folder():
@@ -187,6 +273,8 @@ name_hint_label = tk.Label(status_frame, text="名称:", justify=tk.LEFT, anchor
 name_hint_label.grid(row=0, column=0, sticky="w")
 name_hint_label = tk.Label(status_frame, text="状态", justify=tk.LEFT, anchor="nw")
 name_hint_label.grid(row=0, column=0, sticky="e")
+name_hint_label = tk.Label(status_frame, text="工具", justify=tk.LEFT, anchor="n")
+name_hint_label.grid(row=0, column=1, sticky="")
 
 # 创建虚拟机状态列表框
 vm_list = tk.Listbox(status_frame)
@@ -209,14 +297,25 @@ stop_button = tk.Button(status_frame, text="关闭", command=lambda:run_in_threa
 stop_button.grid(row=5, column=0, padx=5, pady=5, sticky="e")
 
 # 添加设置和关闭 GPU 虚拟化按钮到 status_frame 中
-set_gpu_button = tk.Button(status_frame, text="GPU 虚拟化", command=set_gpu_virtualization)
+set_gpu_button = tk.Button(status_frame, text="GPU 虚拟化", command=lambda:run_in_thread(set_gpu_virtualization))
 set_gpu_button.grid(row=1, column=1, padx=5, pady=5, sticky="e")
 
 Remote_connection_button = tk.Button(status_frame, text="打开远程连接", command=lambda:run_in_thread(open_vm_connect))
 Remote_connection_button.grid(row=2, column=1, padx=5, pady=5, sticky="e")
 
-settings_button = tk.Button(root, text="打开Hyper-V管理器", command=lambda: run_in_thread(open_hyper_v_manager))
-settings_button.pack(padx=5, pady=5)
+settings_button = tk.Button(status_frame, text="Hyper-V管理器", command=lambda: run_in_thread(open_hyper_v_manager))
+settings_button.grid(row=3, column=1, padx=5, pady=5, sticky="e")
+
+# 添加取消按钮
+save_button = tk.Button(status_frame, text="打开日志文件夹", command=open_config_folder)
+save_button.grid(row=7, column=0, padx=5, pady=10, sticky="w")
+
+# 添加取消按钮
+save_button = tk.Button(status_frame, text="取消", command=exit)
+save_button.grid(row=7, column=1, padx=5, pady=10, sticky="ew")
+
+# 设置窗口居中
+center_window(root)
 
 # 主循环
 root.mainloop()
