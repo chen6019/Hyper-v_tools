@@ -262,7 +262,6 @@ logging.basicConfig(
 root = tk.Tk()
 root.title("Hyper-V 管理工具")
 status_frame = tk.Frame(root)
-root.wm_minsize(400, 400)  # 将宽度设置为600，高度设置为600
 
 # 创建状态框架
 status_frame = tk.Frame(root)
