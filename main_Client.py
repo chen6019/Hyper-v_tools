@@ -171,8 +171,12 @@ def set_gpu_virtualization():
     # 保存和取消按钮
     def save_gpu_settings():
         gpu_partition = gpu_partition_var.get()
-        low_mem = low_mem_var.get() or "1Gb"
-        high_mem = high_mem_var.get() or "32GB"
+        if gpu_partition == "获取失败或未设置":
+            messagebox.showerror("错误", "您还未设置GPU分区")
+            GPU_window.destroy()
+            return
+        low_mem: str = low_mem_var.get() or "1Gb"
+        high_mem: str = high_mem_var.get() or "32GB"
         try:
             # 构建 PowerShell 命令
             ps_command = f'''
@@ -191,9 +195,6 @@ def set_gpu_virtualization():
         except Exception as e:
             messagebox.showerror("错误", f"设置 GPU 虚拟化失败：{e}")
             logging.error(f"设置 GPU 虚拟化失败: {e}")
-
-    def cancel1():
-        GPU_window.destroy()
 
     # 添加查询 GPU 分区的按钮
     def query_gpu_partitions():
@@ -219,13 +220,22 @@ def set_gpu_virtualization():
             # 创建选择窗口
             select_window = tk.Toplevel(GPU_window)
             select_window.title("选择 GPU")
-            select_window.resizable(False, False)
+            select_window.minsize(400, 300)
 
-            tk.Label(select_window, text="请选择要使用的 GPU分区：").grid(row=0, column=0, sticky="w")
+            main_frame = tk.Frame(select_window)
+            main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
-            # 创建列表框
-            gpu_listbox = tk.Listbox(select_window, width=40)
-            gpu_listbox.grid(row=1, column=0, padx=10, pady=10)
+            main_frame.grid_columnconfigure(0, weight=1)
+            main_frame.grid_rowconfigure(1, weight=1)
+
+            tk.Label(main_frame, text="请选择要使用的 GPU分区：").grid(row=0, column=0, sticky="w")
+            gpu_listbox = tk.Listbox(main_frame)
+            gpu_listbox.grid(row=1, column=0, sticky="nsew", padx=5, pady=5)
+
+            button_frame = tk.Frame(main_frame)
+            button_frame.grid(row=2, column=0, sticky="ew", pady=5)
+            button_frame.grid_columnconfigure(0, weight=1)
+            button_frame.grid_columnconfigure(1, weight=1)
 
             for path in gpu_paths:
                 gpu_listbox.insert(tk.END, path)
@@ -237,9 +247,6 @@ def set_gpu_virtualization():
                     gpu_partition_var.set(selected_gpu)
                 select_window.destroy()
 
-            def destroy_win():
-                select_window.destroy()
-
             def open_device_manager():
                 try:
                     subprocess.Popen(['cmd', '/c', 'start', 'devmgmt.msc'])
@@ -248,14 +255,32 @@ def set_gpu_virtualization():
 
             # 添加双击事件绑定
             gpu_listbox.bind('<Double-Button-1>', lambda e: on_select())
-            tk.Button(select_window, text="打开设备管理器", command=open_device_manager).grid(row=0, column=0, sticky="e", padx=10, pady=5)
-            tk.Button(select_window, text="确定", command=on_select).grid(row=2, column=0, sticky="nw", padx=5, pady=5)
-            tk.Button(select_window, text="取消", command=destroy_win).grid(row=2, column=0, sticky="ne", padx=5, pady=5)
+            tk.Button(main_frame, text="打开设备管理器", command=open_device_manager).grid(row=0, column=0, sticky="e")
+            tk.Button(button_frame, text="确定", command=on_select).grid(row=2, column=0, sticky="nw", padx=5, pady=5)
+            tk.Button(button_frame, text="取消", command=lambda:select_window.destroy()).grid(row=2, column=0, sticky="ne", padx=5, pady=5)
             center_window(select_window)
 
         except Exception as e:
             messagebox.showerror("错误", f"查询 GPU 分区失败：{e}")
             logging.error(f"查询 GPU 分区失败: {e}")
+    
+    def delete():
+        confirm = messagebox.askyesno("确认", "您确定要 删除 这个虚拟机的GPU分区吗？")
+        if confirm:
+            try:
+                # PowerShell 命令
+                command = f'powershell Remove-VMGpuPartitionAdapter -VMName {vm_name}'
+                subprocess.run(["powershell", "-Command", command], check=True)
+                messagebox.showinfo("成功", "GPU 分区已删除。")
+                GPU_window.destroy()
+            except Exception as e:
+                messagebox.showerror("错误", f"删除 GPU 分区失败：{e}")
+                logging.error(f"删除 GPU 分区失败: {e}")
+                return False
+        else:
+            messagebox.showinfo("取消","你取消了删除GPU分区!!")
+            GPU_window.destroy()
+
     # 判断是否拥有管理员权限
     def is_admin():
         try:
@@ -271,24 +296,37 @@ def set_gpu_virtualization():
             exit()
         else:
             messagebox.showinfo("取消","你取消了管理员权限重启!\n可能会设置失败!")
-            cancel1()
+            GPU_window.destroy()
     
     GPU_window = tk.Toplevel(root)
-    if not is_admin():
-        GPU_window.title("GPU 虚拟化 (低权限)")
+    if is_admin():
+        GPU_window.title("GPU 虚拟化(管理员)")
     else:
-        GPU_window.title("GPU 虚拟化 (管理员)")
-    GPU_window.resizable(False, False)
+        GPU_window.title("GPU 虚拟化(低权限)")
+    GPU_window.minsize(500, 240)  # 设置最小窗口大小
+    # 创建主框架
+    main_frame = tk.Frame(GPU_window)
+    main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
-    tk.Label(GPU_window, text=f"当前虚拟机: {vm_name}").grid(row=0, column=0, pady=10,padx=10,sticky="w")
+    # 配置网格权重
+    main_frame.grid_columnconfigure(1, weight=1)  # 使输入框可以水平扩展
+    main_frame.grid_rowconfigure(1, weight=1)     # 让列表框可以垂直扩展
 
-    tk.Button(GPU_window, text="获取管理员权限", command=get_administrator_privileges).grid(row=0, column=1,padx=5, sticky="e")
 
-    # 添加输入框用于指定 GPU 分区
-    tk.Label(GPU_window, text="GPU 分区路径：").grid(row=1, column=0, sticky="e")
-    gpu_partition_var = tk.StringVar()
-    gpu_partition_var.set("获取中,请稍候.....")
-    tk.Entry(GPU_window, textvariable=gpu_partition_var, state='readonly').grid(row=1, column=1, sticky="w")
+    # 标题行
+    title_frame = tk.Frame(main_frame)
+    title_frame.grid(row=0, column=0, columnspan=2, sticky="ew")
+    title_frame.grid_columnconfigure(0, weight=1)
+    title_frame.grid_columnconfigure(1, weight=1)
+
+    tk.Label(title_frame, text=f"当前虚拟机: {vm_name}").grid(row=0, column=0, sticky="w")
+    tk.Button(title_frame, text="获取管理员权限", command=get_administrator_privileges).grid(row=0, column=1, sticky="e")
+
+    # 其他控件使用相对布局
+    tk.Label(main_frame, text="GPU 分区路径：").grid(row=1, column=0, sticky="e", pady=5)
+    gpu_partition_var = tk.StringVar(value="获取中,请稍候.....")
+
+    tk.Entry(main_frame, textvariable=gpu_partition_var, state='readonly').grid(row=1, column=1, sticky="ew", padx=5)
 
     # 自动获取 GPU 虚拟化状态并填入 GPU 分区路径
     gpu_status = check_gpu_virtualization_status(vm_name)
@@ -297,19 +335,30 @@ def set_gpu_virtualization():
     else:
         gpu_partition_var.set("获取失败或未设置")
 
-    tk.Label(GPU_window, text="显存映射一般默认即可").grid(row=2, column=0, sticky="e")
-
-    tk.Button(GPU_window, text="选择 GPU 分区", command=query_gpu_partitions).grid(row=2, column=1, padx=5, pady=5, sticky="e")
+    tk.Label(main_frame, text="显存映射一般默认即可").grid(row=2, column=0)
+    # 创建按钮但不立即显示
+    delete_button = tk.Button(main_frame, text="删除 GPU 分区", command=delete)
+    select_button = tk.Button(main_frame, text="选择 GPU 分区", command=query_gpu_partitions)
+    
+    # 根据条件显示或隐藏按钮
+    if gpu_status and "InstancePath" in gpu_status:
+        # GPU 已配置，显示删除按钮，隐藏选择按钮
+        delete_button.grid(row=2, column=1, padx=5, pady=5, sticky="e")
+        select_button.grid_remove()
+    else:
+        # GPU 未配置，显示选择按钮，隐藏删除按钮
+        select_button.grid(row=2, column=1, padx=5, pady=5, sticky="e")
+        delete_button.grid_remove()
 
     # 添加输入框用于设置显存映射空间大小
-    tk.Label(GPU_window, text="显存映射空间最小:").grid(row=3, column=0, sticky="e")
+    tk.Label(main_frame, text="显存映射空间最小:").grid(row=3, column=0, sticky="e")
     low_mem_var = tk.StringVar(value="1Gb")
-    tk.Entry(GPU_window, textvariable=low_mem_var).grid(row=3, column=1, sticky="w")
-    tk.Label(GPU_window, text="显存映射空间最大：").grid(row=4, column=0, sticky="e")
+    tk.Entry(main_frame, textvariable=low_mem_var).grid(row=3, column=1, sticky="w")
+    tk.Label(main_frame, text="显存映射空间最大").grid(row=4, column=0, sticky="e")
     high_mem_var = tk.StringVar(value="32GB")
-    tk.Entry(GPU_window, textvariable=high_mem_var).grid(row=4, column=1, sticky="w")
-    tk.Button(GPU_window, text="保存", command=save_gpu_settings).grid(row=5, column=0, pady=15)
-    tk.Button(GPU_window, text="取消", command=cancel1).grid(row=5, column=1)
+    tk.Entry(main_frame, textvariable=high_mem_var).grid(row=4, column=1, sticky="w")
+    tk.Button(main_frame, text="保存", command=save_gpu_settings).grid(row=5, column=0, pady=15)
+    tk.Button(main_frame, text="取消", command=lambda:GPU_window.destroy()).grid(row=5, column=1)
 
     center_window(GPU_window)
 
@@ -341,24 +390,31 @@ logging.basicConfig(
 # 创建主窗口
 root = tk.Tk()
 root.title("Hyper-V 管理工具")
-status_frame = tk.Frame(root)
-root.resizable(False, False)
+root.minsize(300, 300)  # 设置最小窗口大小
 
 # 创建状态框架
 status_frame = tk.Frame(root)
-status_frame.pack(fill=tk.BOTH, expand=True, padx=15)  # 左边空出15db左右的空间
+status_frame.pack(fill=tk.BOTH, expand=True, padx=15, pady=10)
 
-# 添加提示标签
-name_hint_label = tk.Label(status_frame, text="名称:", justify=tk.LEFT, anchor="nw")
-name_hint_label.grid(row=0, column=0, sticky="w")
-name_hint_label = tk.Label(status_frame, text="状态", justify=tk.LEFT, anchor="nw")
-name_hint_label.grid(row=0, column=0, sticky="e")
-name_hint_label = tk.Label(status_frame, text="工具", justify=tk.LEFT, anchor="n")
-name_hint_label.grid(row=0, column=1, sticky="")
+# 创建标题框架
+title_frame = tk.Frame(status_frame)
+title_frame.grid(row=0, column=0, columnspan=2, sticky="ew")
+title_frame.grid_columnconfigure(0, weight=1)
+title_frame.grid_columnconfigure(1, weight=1)
+
+# 添加提示标签到标题框架
+tk.Label(title_frame, text="名称:", justify=tk.LEFT).grid(row=0, column=0, sticky="w")
+tk.Label(title_frame, text="状态", justify=tk.LEFT).grid(row=0, column=0, sticky="e")
+tk.Label(title_frame, text="工具", justify=tk.LEFT).grid(row=0, column=1, sticky="e")
+
+# 配置网格权重
+status_frame.grid_columnconfigure(0, weight=3)  # 列表框占更多空间
+status_frame.grid_columnconfigure(1, weight=1)  # 按钮占更少空间
+status_frame.grid_rowconfigure(1, weight=1)     # 让列表框可以垂直扩展
 
 # 创建虚拟机状态列表框
 vm_list = tk.Listbox(status_frame)
-vm_list.grid(row=1, column=0, rowspan=4, sticky="nsew")
+vm_list.grid(row=1, column=0, rowspan=4, sticky="nsew", padx=5, pady=5)
 # 添加双击事件绑定
 vm_list.bind('<Double-Button-1>', lambda e: run_in_thread(set_gpu_virtualization))
 
