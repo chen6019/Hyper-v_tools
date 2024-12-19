@@ -1,3 +1,6 @@
+# 打包指令:
+# pyinstaller -F -n Server --noconsole main_Server.py
+
 import ctypes
 import sys
 import tkinter as tk
