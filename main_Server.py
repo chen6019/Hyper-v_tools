@@ -20,12 +20,22 @@ def center_window(window):
     y = (window.winfo_screenheight() // 2) - (height // 2)
     window.geometry(f"{width}x{height}+{x}+{y}")
 
+# 添加一个通用的创建隐藏终端的 startupinfo
+def create_hidden_startupinfo():
+    startupinfo = subprocess.STARTUPINFO()
+    startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+    startupinfo.wShowWindow = subprocess.SW_HIDE
+    return startupinfo
+
 def show_vm_status():
     # PowerShell 命令获取虚拟机状态
     ps_command = "Get-VM | Select-Object Name, State | Format-Table -AutoSize"
     
     # 调用 PowerShell 命令
-    result = subprocess.run(["powershell", "-Command", ps_command], capture_output=True, text=True)
+    result = subprocess.run(["powershell", "-Command", ps_command], 
+                          capture_output=True, 
+                          text=True,
+                          startupinfo=create_hidden_startupinfo())
     
     # 返回结果
     return result.stdout
@@ -57,7 +67,9 @@ def update_vm_list(names, states):
 # 定义启动虚拟机的工作函数
 def start_vm_process(vm_name):
     try:
-        subprocess.run(["PowerShell", "Start-VM", "-Name", vm_name], check=True)
+        subprocess.run(["PowerShell", "Start-VM", "-Name", vm_name], 
+                      check=True,
+                      startupinfo=create_hidden_startupinfo())
         logging.info(f"虚拟机 {vm_name} 已启动。")
     except subprocess.CalledProcessError as e:
         logging.error(f"启动虚拟机 {vm_name} 失败: {e}")
@@ -66,7 +78,9 @@ def start_vm_process(vm_name):
 def stop_vm_process(vm_name):
     try:
         # 使用 PowerShell 强制关闭虚拟机
-        subprocess.run(["powershell", "-Command", f"Stop-VM -Name '{vm_name}' -Force"], check=True)
+        subprocess.run(["powershell", "-Command", f"Stop-VM -Name '{vm_name}' -Force"], 
+                      check=True,
+                      startupinfo=create_hidden_startupinfo())
         logging.info(f"虚拟机 {vm_name} 已强制关闭。")
     except subprocess.CalledProcessError as e:
         logging.error(f"强制关闭虚拟机 {vm_name} 失败: {e}")
@@ -114,7 +128,9 @@ def open_vm_connect():
 
     try:
         # 使用 vmconnect 打开特定虚拟机的远程连接界面
-        subprocess.run(["vmconnect", "localhost", vm_name], check=True)
+        subprocess.run(["vmconnect", "localhost", vm_name], 
+                      check=True,
+                      startupinfo=create_hidden_startupinfo())
         logging.info(f"已打开虚拟机 {vm_name} 的远程连接界面。")
     except subprocess.CalledProcessError as e:
         logging.error(f"无法打开虚拟机 {vm_name} 的远程连接界面: {e}")
@@ -142,7 +158,11 @@ def check_gpu_virtualization_status(vm):
     try:
         # PowerShell 命令
         command = f'powershell Get-VMGpuPartitionAdapter -VMName {vm}'
-        result = subprocess.run(command, capture_output=True, text=True, shell=True)
+        result = subprocess.run(command, 
+                              capture_output=True, 
+                              text=True, 
+                              shell=True,
+                              startupinfo=create_hidden_startupinfo())
         
         if result.returncode != 0:
             raise Exception(result.stderr)
@@ -191,7 +211,9 @@ def set_gpu_virtualization():
             Set-VM -HighMemoryMappedIoSpace {high_mem} -VMName $vm
             '''
             # 执行 PowerShell 命令
-            subprocess.run(["powershell", "-Command", ps_command], check=True)
+            subprocess.run(["powershell", "-Command", ps_command], 
+                         check=True,
+                         startupinfo=create_hidden_startupinfo())
             messagebox.showinfo("成功", "GPU 虚拟化设置已保存。")
             GPU_window.destroy()
         except Exception as e:
@@ -203,7 +225,10 @@ def set_gpu_virtualization():
         try:
             # 执行 PowerShell 命令获取 GPU 分区信息
             command = 'Get-VMHostPartitionableGpu | Select-Object Name | Format-Table -AutoSize'
-            result = subprocess.run(["powershell", "-Command", command], capture_output=True, text=True)
+            result = subprocess.run(["powershell", "-Command", command], 
+                                   capture_output=True, 
+                                   text=True,
+                                   startupinfo=create_hidden_startupinfo())
             
             if result.returncode != 0:
                 raise Exception(result.stderr)
@@ -272,7 +297,9 @@ def set_gpu_virtualization():
             try:
                 # PowerShell 命令
                 command = f'powershell Remove-VMGpuPartitionAdapter -VMName {vm_name}'
-                subprocess.run(["powershell", "-Command", command], check=True)
+                subprocess.run(["powershell", "-Command", command], 
+                              check=True,
+                              startupinfo=create_hidden_startupinfo())
                 messagebox.showinfo("成功", "GPU 分区已删除。")
                 GPU_window.destroy()
             except Exception as e:
