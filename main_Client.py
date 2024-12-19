@@ -1,5 +1,4 @@
 import ctypes
-from email import message
 import sys
 import tkinter as tk
 from tkinter import messagebox
