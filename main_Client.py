@@ -1,4 +1,5 @@
 import ctypes
+from email import message
 import sys
 import tkinter as tk
 from tkinter import messagebox
@@ -110,8 +111,8 @@ def open_vm_connect():
     vm_name = display_text.split(" ", 1)[0]  # 获取名称部分
 
     try:
-        # 使用 vmconnect.exe 打开特定虚拟机的远程连接界面
-        subprocess.run(["vmconnect.exe", "localhost", vm_name], check=True)
+        # 使用 vmconnect 打开特定虚拟机的远程连接界面
+        subprocess.run(["vmconnect", "localhost", vm_name], check=True)
         logging.info(f"已打开虚拟机 {vm_name} 的远程连接界面。")
     except subprocess.CalledProcessError as e:
         logging.error(f"无法打开虚拟机 {vm_name} 的远程连接界面: {e}")
@@ -129,34 +130,16 @@ def open_hyper_v_manager():
         logging.error(f"无法打开 Hyper-V 管理器: {e}")
         messagebox.showerror("错误", "无法打开 Hyper-V 管理器。\n请确保已开启 Hyper-V。")
 
+# 在新线程中运行函数
 def run_in_thread(target, *args):
     thread = threading.Thread(target=target, args=args)
     thread.start()
 
-# 判断是否拥有管理员权限
-def is_admin():
-    try:
-        return ctypes.windll.shell32.IsUserAnAdmin()
-    except Exception:
-        return False
-    
-# 获取管理员权限
-def get_administrator_privileges():
-    confirm = messagebox.askyesno("确认", "您确定要以管理员权限重新运行吗？")
-    if confirm:
-        ctypes.windll.shell32.ShellExecuteW(None,"runas", sys.executable, __file__, None, 1)
-        exit()
-
 # 查看GPU虚拟化状态
-def check_gpu_virtualization_status():
-    selected = vm_list.curselection()
-    if not selected:
-        return False
-    display_text = vm_list.get(selected[0])
-    vm = display_text.split(" ", 1)[0]  
+def check_gpu_virtualization_status(vm):
     try:
         # PowerShell 命令
-        command = f'powershell.exe Get-VMGpuPartitionAdapter -VMName {vm}'
+        command = f'powershell Get-VMGpuPartitionAdapter -VMName {vm}'
         result = subprocess.run(command, capture_output=True, text=True, shell=True)
         
         if result.returncode != 0:
@@ -178,58 +161,155 @@ def check_gpu_virtualization_status():
 
 # 设置 GPU 虚拟化
 def set_gpu_virtualization():
-    gpu_info = check_gpu_virtualization_status()
-    if gpu_info is False:
+    selected = vm_list.curselection()
+    if not selected:
         messagebox.showwarning("警告", "请选择一个虚拟机。")
         return
-    elif gpu_info is None:
-        messagebox.showerror("错误", "无法获取 GPU 虚拟化状态。")
-        return
-    GPU_window = tk.Toplevel(root)
-    GPU_window.title("GPU虚拟化")
-    GPU_window.resizable(False, False)
-
-    # 创建标签和输入框
-    tk.Label(GPU_window, text="MinPartitionVRAM：").grid(row=0, column=0, sticky="e")
-    min_vram_var = tk.StringVar(value=gpu_info.get("MinPartitionVRAM", ""))
-    tk.Entry(GPU_window, textvariable=min_vram_var).grid(row=0, column=1, sticky="w")
-
-    tk.Label(GPU_window, text="MaxPartitionVRAM：").grid(row=1, column=0, sticky="e")
-    max_vram_var = tk.StringVar(value=gpu_info.get("MaxPartitionVRAM", ""))
-    tk.Entry(GPU_window, textvariable=max_vram_var).grid(row=1, column=1, sticky="w")
-
-    tk.Label(GPU_window, text="OptimalPartitionVRAM：").grid(row=2, column=0, sticky="e")
-    optimal_vram_var = tk.StringVar(value=gpu_info.get("OptimalPartitionVRAM", ""))
-    tk.Entry(GPU_window, textvariable=optimal_vram_var).grid(row=2, column=1, sticky="w")
+    display_text = vm_list.get(selected[0])
+    vm_name = display_text.split(" ", 1)[0]
 
     # 保存和取消按钮
     def save_gpu_settings():
-        selected = vm_list.curselection()
-        if not selected:
-            messagebox.showwarning("警告", "请选择一个虚拟机。")
-            return
-        display_text = vm_list.get(selected[0])
-        vm_name = display_text.split(" ", 1)[0]
-        min_vram = min_vram_var.get()
-        max_vram = max_vram_var.get()
-        optimal_vram = optimal_vram_var.get()
-        # 获取其他参数的值
-
+        gpu_partition = gpu_partition_var.get()
+        low_mem = low_mem_var.get() or "1Gb"
+        high_mem = high_mem_var.get() or "32GB"
         try:
             # 构建 PowerShell 命令
-            ps_command = f'Set-VMGpuPartitionAdapter -VMName "{vm_name}" -MinPartitionVRAM {min_vram} -MaxPartitionVRAM {max_vram} -OptimalPartitionVRAM {optimal_vram}'
+            ps_command = f'''
+            $vm = "{vm_name}"
+            $gpupath = "{gpu_partition}"
+            Add-VMGpuPartitionAdapter -VMName $vm -InstancePath $gpupath
+            Set-VMGpuPartitionAdapter -VMName $vm -MinPartitionVRAM 80000000 -MaxPartitionVRAM 100000000 -OptimalPartitionVRAM 100000000 -MinPartitionEncode 80000000 -MaxPartitionEncode 100000000 -OptimalPartitionEncode 100000000 -MinPartitionDecode 80000000 -MaxPartitionDecode 100000000 -OptimalPartitionDecode 100000000 -MinPartitionCompute 80000000 -MaxPartitionCompute 100000000 -OptimalPartitionCompute 100000000
+            Set-VM -GuestControlledCacheTypes $true -VMName $vm
+            Set-VM -LowMemoryMappedIoSpace {low_mem} -VMName $vm
+            Set-VM -HighMemoryMappedIoSpace {high_mem} -VMName $vm
+            '''
             # 执行 PowerShell 命令
-            subprocess.run(["powershell.exe", ps_command], check=True)
+            subprocess.run(["powershell", "-Command", ps_command], check=True)
             messagebox.showinfo("成功", "GPU 虚拟化设置已保存。")
             GPU_window.destroy()
         except Exception as e:
             messagebox.showerror("错误", f"设置 GPU 虚拟化失败：{e}")
+            logging.error(f"设置 GPU 虚拟化失败: {e}")
 
-    def cancel():
+    def cancel1():
         GPU_window.destroy()
 
-    tk.Button(GPU_window, text="保存", command=save_gpu_settings).grid(row=3, column=0, pady=15)
-    tk.Button(GPU_window, text="取消", command=cancel).grid(row=3, column=1)
+    # 添加查询 GPU 分区的按钮
+    def query_gpu_partitions():
+        try:
+            # 执行 PowerShell 命令获取 GPU 分区信息
+            command = 'Get-VMHostPartitionableGpu | Select-Object Name | Format-Table -AutoSize'
+            result = subprocess.run(["powershell", "-Command", command], capture_output=True, text=True)
+            
+            if result.returncode != 0:
+                raise Exception(result.stderr)
+            
+            # 解析输出获取 Name 值
+            gpu_paths = []
+            for line in result.stdout.strip().split('\n'):
+                line = line.strip()
+                if line and not line.startswith('Name') and not line.startswith('-'):
+                    gpu_paths.append(line)
+
+            if not gpu_paths:
+                messagebox.showwarning("警告", "未找到可用的 GPU 分区。")
+                return
+
+            # 创建选择窗口
+            select_window = tk.Toplevel(GPU_window)
+            select_window.title("选择 GPU")
+            select_window.resizable(False, False)
+
+            tk.Label(select_window, text="请选择要使用的 GPU分区：").grid(row=0, column=0, sticky="w")
+
+            # 创建列表框
+            gpu_listbox = tk.Listbox(select_window, width=40)
+            gpu_listbox.grid(row=1, column=0, padx=10, pady=10)
+
+            for path in gpu_paths:
+                gpu_listbox.insert(tk.END, path)
+
+            def on_select():
+                selection = gpu_listbox.curselection()
+                if selection:
+                    selected_gpu = gpu_paths[selection[0]]
+                    gpu_partition_var.set(selected_gpu)
+                select_window.destroy()
+
+            def destroy_win():
+                select_window.destroy()
+
+            def open_device_manager():
+                try:
+                    subprocess.Popen(['cmd', '/c', 'start', 'devmgmt.msc'])
+                except Exception as e:
+                    messagebox.showerror("错误", f"无法打开设备管理器: {str(e)}")
+
+            # 添加双击事件绑定
+            gpu_listbox.bind('<Double-Button-1>', lambda e: on_select())
+            tk.Button(select_window, text="打开设备管理器", command=open_device_manager).grid(row=0, column=0, sticky="e", padx=10, pady=5)
+            tk.Button(select_window, text="确定", command=on_select).grid(row=2, column=0, sticky="nw", padx=5, pady=5)
+            tk.Button(select_window, text="取消", command=destroy_win).grid(row=2, column=0, sticky="ne", padx=5, pady=5)
+            center_window(select_window)
+
+        except Exception as e:
+            messagebox.showerror("错误", f"查询 GPU 分区失败：{e}")
+            logging.error(f"查询 GPU 分区失败: {e}")
+    # 判断是否拥有管理员权限
+    def is_admin():
+        try:
+            return ctypes.windll.shell32.IsUserAnAdmin()
+        except Exception:
+            return False
+    
+    # 获取管理员权限
+    def get_administrator_privileges():
+        confirm = messagebox.askyesno("确认", "您确定要以管理员权限重新运行吗？")
+        if confirm:
+            ctypes.windll.shell32.ShellExecuteW(None,"runas", sys.executable, __file__, None, 0)
+            exit()
+        else:
+            messagebox.showinfo("取消","你取消了管理员权限重启!\n可能会设置失败!")
+            cancel1()
+    
+    GPU_window = tk.Toplevel(root)
+    if not is_admin():
+        GPU_window.title("GPU 虚拟化 (低权限)")
+    else:
+        GPU_window.title("GPU 虚拟化 (管理员)")
+    GPU_window.resizable(False, False)
+
+    tk.Label(GPU_window, text=f"当前虚拟机: {vm_name}").grid(row=0, column=0, pady=10,padx=10,sticky="w")
+
+    tk.Button(GPU_window, text="获取管理员权限", command=get_administrator_privileges).grid(row=0, column=1,padx=5, sticky="e")
+
+    # 添加输入框用于指定 GPU 分区
+    tk.Label(GPU_window, text="GPU 分区路径：").grid(row=1, column=0, sticky="e")
+    gpu_partition_var = tk.StringVar()
+    gpu_partition_var.set("获取中,请稍候.....")
+    tk.Entry(GPU_window, textvariable=gpu_partition_var, state='readonly').grid(row=1, column=1, sticky="w")
+
+    # 自动获取 GPU 虚拟化状态并填入 GPU 分区路径
+    gpu_status = check_gpu_virtualization_status(vm_name)
+    if gpu_status and "InstancePath" in gpu_status:
+        gpu_partition_var.set(gpu_status["InstancePath"])
+    else:
+        gpu_partition_var.set("获取失败或未设置")
+
+    tk.Label(GPU_window, text="显存映射一般默认即可").grid(row=2, column=0, sticky="e")
+
+    tk.Button(GPU_window, text="选择 GPU 分区", command=query_gpu_partitions).grid(row=2, column=1, padx=5, pady=5, sticky="e")
+
+    # 添加输入框用于设置显存映射空间大小
+    tk.Label(GPU_window, text="显存映射空间最小:").grid(row=3, column=0, sticky="e")
+    low_mem_var = tk.StringVar(value="1Gb")
+    tk.Entry(GPU_window, textvariable=low_mem_var).grid(row=3, column=1, sticky="w")
+    tk.Label(GPU_window, text="显存映射空间最大：").grid(row=4, column=0, sticky="e")
+    high_mem_var = tk.StringVar(value="32GB")
+    tk.Entry(GPU_window, textvariable=high_mem_var).grid(row=4, column=1, sticky="w")
+    tk.Button(GPU_window, text="保存", command=save_gpu_settings).grid(row=5, column=0, pady=15)
+    tk.Button(GPU_window, text="取消", command=cancel1).grid(row=5, column=1)
 
     center_window(GPU_window)
 
@@ -262,6 +342,7 @@ logging.basicConfig(
 root = tk.Tk()
 root.title("Hyper-V 管理工具")
 status_frame = tk.Frame(root)
+root.resizable(False, False)
 
 # 创建状态框架
 status_frame = tk.Frame(root)
@@ -278,6 +359,8 @@ name_hint_label.grid(row=0, column=1, sticky="")
 # 创建虚拟机状态列表框
 vm_list = tk.Listbox(status_frame)
 vm_list.grid(row=1, column=0, rowspan=4, sticky="nsew")
+# 添加双击事件绑定
+vm_list.bind('<Double-Button-1>', lambda e: run_in_thread(set_gpu_virtualization))
 
 # 添加刷新按钮
 refresh_button = tk.Button(status_frame, text="刷新", command=lambda:run_in_thread(refresh_vm_status))
@@ -305,12 +388,12 @@ Remote_connection_button.grid(row=2, column=1, padx=5, pady=5, sticky="e")
 settings_button = tk.Button(status_frame, text="Hyper-V管理器", command=lambda: run_in_thread(open_hyper_v_manager))
 settings_button.grid(row=3, column=1, padx=5, pady=5, sticky="e")
 
-# 添加取消按钮
+# 添加按钮
 save_button = tk.Button(status_frame, text="打开日志文件夹", command=open_config_folder)
 save_button.grid(row=7, column=0, padx=5, pady=10, sticky="w")
 
 # 添加取消按钮
-save_button = tk.Button(status_frame, text="取消", command=exit)
+save_button = tk.Button(status_frame, text="关闭", command=exit)
 save_button.grid(row=7, column=1, padx=5, pady=10, sticky="ew")
 
 # 设置窗口居中
