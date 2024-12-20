@@ -1,8 +1,12 @@
-# 打包指令:
-# pyinstaller -F -n Server --noconsole main_Server.py
+"""
+打包指令:
+pyinstaller -F -n Server --noconsole main_Server.py
+"""
+
 
 import ctypes
 import json
+from math import log
 import sys
 import tkinter as tk
 from tkinter import messagebox,filedialog
@@ -115,7 +119,7 @@ def stop_vm():
     if not confirm:
         return
     stop_vm_process(vm_name)
-    messagebox.showinfo("关闭中", f"虚拟机 {vm_name} 正在强制关闭。")
+    messagebox.showinfo("关闭中", f"正在强制关闭虚拟机 {vm_name} 。")
     refresh_vm_status()
 
 # 打开虚拟机远程连接
@@ -198,8 +202,12 @@ def set_gpu_virtualization():
             messagebox.showerror("错误", "您还未设置GPU分区")
             GPU_window.destroy()
             return
-        low_mem: str = low_mem_var.get() or "1Gb"
-        high_mem: str = high_mem_var.get() or "32GB"
+        low_mem: str = str(low_mem_var.get() or 1)
+        high_mem: str = str(high_mem_var.get() or 32)
+        low_mem = low_mem + "GB"
+        logging.info(f"设置显存映射空间最小: {low_mem}")
+        high_mem = high_mem + "GB"
+        logging.info(f"设置显存映射空间最大: {high_mem}")
         try:
             # 构建 PowerShell 命令
             ps_command = f'''
@@ -332,30 +340,43 @@ def set_gpu_virtualization():
             # 保存配置到 JSON 文件
             with open(f"{appdata_path}\\{vm_name}_config.json", "w") as f:
                 json.dump(config, f, indent=4)
-            toast.config(text=f"{vm_name}配置已保存。", foreground="blue")
-            logging.info(f"{vm_name}配置已保存。")
+            toast.config(text=f"{vm_name} 配置已保存。", foreground="blue")
+            logging.info(f"{vm_name} 配置已保存。")
+        except ValueError as ve:
+            messagebox.showerror("错误", "保存配置失败：值错误或输入错误")
+            logging.error(f"保存配置失败: 值错误或输入错误{ve}")
         except Exception as e:
-            messagebox.showerror("错误", f"保存配置失败：{e}")
+            messagebox.showerror("错误", "保存配置失败：未知错误")
             logging.error(f"保存配置失败: {e}")
-
+    
     def check(vm_name):
         try:
             # 读取配置文件
-            with open(f"{appdata_path}\\{vm_name}_config.json", "r") as f:
+            config_path = f"{appdata_path}\\{vm_name}_config.json"
+            if os.path.getsize(config_path) == 0:
+                raise ValueError("配置文件为空")
+            
+            with open(config_path, "r") as f:
                 config = json.load(f)
                 # 设置 Tkinter 变量
                 gpu_partition_var.set(config.get("gpu_partition", ""))
                 gpu_driver_var.set(config.get("gpu_driver", ""))
-                low_mem_var.set(config.get("low_mem", ""))
-                high_mem_var.set(config.get("high_mem", ""))
+                low_mem_var.set(config.get("low_mem", 1))
+                high_mem_var.set(config.get("high_mem", 32))
                 logging.info(f"{vm_name}配置成功读取")
                 toast.config(text=f"{vm_name}配置成功读取", foreground="blue")
         except FileNotFoundError:
             logging.info(f"{vm_name}配置文件未找到")
             toast.config(text=f"{vm_name}配置文件未找到", foreground="red")
+        except json.JSONDecodeError:
+            logging.error(f"{vm_name}配置文件格式错误")
+            toast.config(text=f"{vm_name}配置文件格式错误", foreground="red")
+        except ValueError as ve:
+            logging.error(f"{vm_name}配置文件错误: 值错误!")
+            toast.config(text=f"{vm_name}配置文件错误: {ve}", foreground="red")
         except Exception as e:
             logging.error(f"读取{vm_name}配置出错: {e}")
-            toast.config(text=f"读取{vm_name}配置出错：{e}", foreground="red")
+            toast.config(text=f"读取{vm_name}配置出错：未知错误!", foreground="red")
     
     # 判断是否拥有管理员权限
     def is_admin():
@@ -398,7 +419,7 @@ def set_gpu_virtualization():
     toast=tk.Label(title_frame,text="加载中......",foreground="blue")
     toast.grid(row=0,column=0,sticky="w")
 
-    tk.Button(title_frame, text="获取管理员权限", command=get_administrator_privileges).grid(row=0, column=1, sticky="e")
+    tk.Button(title_frame, text="获取管理员权限", command=get_administrator_privileges,foreground="red").grid(row=0, column=1, sticky="e")
 
     # 其他控件使用相对布局
     tk.Label(main_frame, text="GPU 分区路径：").grid(row=1, column=0, sticky="e", pady=5)
@@ -432,14 +453,23 @@ def set_gpu_virtualization():
     tk.Button(main_frame, text="选择路径", command=select_gpu_driver_path).grid(row=3, column=1, sticky="e")
 
     # 显存映射空间设置移到row=5和6
+    def validate_int_input(P):
+        if P.isdigit() or P == "":
+            return True
+        else:
+            return False
+    
+    vcmd = (root.register(validate_int_input), '%P')
+    
     tk.Label(main_frame, text="显存映射空间最小:").grid(row=5, column=0, sticky="e")
-    low_mem_var = tk.StringVar(value="1Gb")
-    tk.Entry(main_frame, textvariable=low_mem_var).grid(row=5, column=1, sticky="w")
+    tk.Label(main_frame, text="GB").grid(row=5, column=1, sticky="s")
+    low_mem_var = tk.IntVar(value=1)
+    tk.Entry(main_frame, textvariable=low_mem_var, validate="key", validatecommand=vcmd).grid(row=5, column=1, sticky="w")
     
-    tk.Label(main_frame, text="显存映射空间最大").grid(row=6, column=0, sticky="e")
-    high_mem_var = tk.StringVar(value="32GB")
-    tk.Entry(main_frame, textvariable=high_mem_var).grid(row=6, column=1, sticky="w")
-    
+    tk.Label(main_frame, text="显存映射空间最大:").grid(row=6, column=0, sticky="e")
+    tk.Label(main_frame, text="GB").grid(row=6, column=1, sticky="s")
+    high_mem_var = tk.IntVar(value=32)
+    tk.Entry(main_frame, textvariable=high_mem_var, validate="key", validatecommand=vcmd).grid(row=6, column=1, sticky="w")
     # 保存和取消按钮移到row=7
     tk.Button(main_frame, text="应用", command=save_gpu_settings,foreground="green").grid(row=7, column=0, pady=15)
     tk.Button(main_frame, text="保存配置", command=lambda:save_config(vm_name),foreground="blue").grid(row=7, column=1)
@@ -516,14 +546,14 @@ update_vm_list(names, states)
 start_button = tk.Button(status_frame, text="启动", command=lambda:run_in_thread(start_vm))
 start_button.grid(row=5, column=0, padx=5, pady=5, sticky="w")
 
-stop_button = tk.Button(status_frame, text="关闭", command=lambda:run_in_thread(stop_vm))
+stop_button = tk.Button(status_frame, text="关闭", command=lambda:run_in_thread(stop_vm),foreground="red")
 stop_button.grid(row=5, column=0, padx=5, pady=5, sticky="e")
 
 # 添加设置和关闭 GPU 虚拟化按钮到 status_frame 中
 set_gpu_button = tk.Button(status_frame, text="GPU 虚拟化", command=lambda:run_in_thread(set_gpu_virtualization))
 set_gpu_button.grid(row=1, column=1, padx=5, pady=5, sticky="e")
 
-Remote_connection_button = tk.Button(status_frame, text="打开远程连接", command=lambda:run_in_thread(open_vm_connect))
+Remote_connection_button = tk.Button(status_frame, text="连接虚拟机", command=lambda:run_in_thread(open_vm_connect))
 Remote_connection_button.grid(row=2, column=1, padx=5, pady=5, sticky="e")
 
 settings_button = tk.Button(status_frame, text="Hyper-V管理器", command=lambda: run_in_thread(open_hyper_v_manager))
@@ -534,7 +564,7 @@ save_button = tk.Button(status_frame, text="打开日志文件夹", command=open
 save_button.grid(row=7, column=0, padx=5, pady=10, sticky="w")
 
 # 添加取消按钮
-save_button = tk.Button(status_frame, text="关闭", command=exit)
+save_button = tk.Button(status_frame, text="关闭", command=exit,foreground="red")
 save_button.grid(row=7, column=1, padx=5, pady=10, sticky="ew")
 
 # 设置窗口居中
