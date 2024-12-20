@@ -419,7 +419,10 @@ def set_gpu_virtualization():
     toast=tk.Label(title_frame,text="加载中......",foreground="blue")
     toast.grid(row=0,column=0,sticky="w")
 
-    tk.Button(title_frame, text="获取管理员权限", command=get_administrator_privileges,foreground="red").grid(row=0, column=1, sticky="e")
+    admin_button=tk.Button(title_frame, text="获取管理员权限", command=get_administrator_privileges,foreground="red")
+    admin_button.grid(row=0, column=1, sticky="e")
+    if is_admin():
+        admin_button.grid_remove()
 
     # 其他控件使用相对布局
     tk.Label(main_frame, text="GPU 分区路径：").grid(row=1, column=0, sticky="e", pady=5)
