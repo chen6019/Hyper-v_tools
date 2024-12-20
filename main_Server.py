@@ -4,7 +4,7 @@
 import ctypes
 import sys
 import tkinter as tk
-from tkinter import messagebox
+from tkinter import messagebox,filedialog
 import subprocess
 import os
 import logging
@@ -160,7 +160,7 @@ def check_gpu_virtualization_status(vm):
         command = f'powershell Get-VMGpuPartitionAdapter -VMName {vm}'
         result = subprocess.run(command, 
                               capture_output=True, 
-                              text=True, 
+                              text=True,
                               shell=True,
                               startupinfo=create_hidden_startupinfo())
         
@@ -310,6 +310,24 @@ def set_gpu_virtualization():
             messagebox.showinfo("取消","你取消了删除GPU分区!!")
             GPU_window.destroy()
 
+    # GPU 选择驱动路径
+    def select_gpu_driver_path():
+        directory_path = filedialog.askdirectory()
+        if directory_path:
+            gpu_driver_var.set(directory_path)
+            # gpu_driver_entry.insert(0, directory_path)
+        else:
+            messagebox.showwarning("提示", "未选择任何文件夹。")
+
+    def save_config():
+        try:
+            with open(f"{appdata_path}\\config.txt", "w") as f:
+                f.write(f"{vm_name}\n{gpu_partition_var.get()}\n{gpu_driver_var.get()}\n{low_mem_var.get()}\n{high_mem_var.get()}")
+            messagebox.showinfo("成功", "配置已保存。")
+        except Exception as e:
+            messagebox.showerror("错误", f"保存配置失败：{e}")
+            logging.error(f"保存配置失败: {e}")
+    
     # 判断是否拥有管理员权限
     def is_admin():
         try:
@@ -364,30 +382,39 @@ def set_gpu_virtualization():
     else:
         gpu_partition_var.set("获取失败或未设置")
 
-    tk.Label(main_frame, text="显存映射一般默认即可").grid(row=2, column=0)
-    # 创建按钮但不立即显示
+    # 在GPU分区路径下面添加GPU驱动路径选择
+    tk.Label(main_frame, text="GPU 驱动路径：").grid(row=3, column=0, sticky="e", pady=5)
+    gpu_driver_var = tk.StringVar(value="")
+    tk.Entry(main_frame, textvariable=gpu_driver_var, state='readonly').grid(row=3, column=1, sticky="ew", padx=5)
+    tk.Button(main_frame, text="选择路径", command=select_gpu_driver_path).grid(row=3, column=1, sticky="e")
+
+    # 显示映射一般默认即可的标签移到row=4
+    tk.Label(main_frame, text="显存映射一般默认即可").grid(row=4, column=0,sticky="es")
+    
+    # 删除和选择GPU分区按钮移到row=2
     delete_button = tk.Button(main_frame, text="删除 GPU 分区", command=delete)
     select_button = tk.Button(main_frame, text="选择 GPU 分区", command=query_gpu_partitions)
     
-    # 根据条件显示或隐藏按钮
     if gpu_status and "InstancePath" in gpu_status:
-        # GPU 已配置，显示删除按钮，隐藏选择按钮
         delete_button.grid(row=2, column=1, padx=5, pady=5, sticky="e")
         select_button.grid_remove()
     else:
-        # GPU 未配置，显示选择按钮，隐藏删除按钮
         select_button.grid(row=2, column=1, padx=5, pady=5, sticky="e")
         delete_button.grid_remove()
 
-    # 添加输入框用于设置显存映射空间大小
-    tk.Label(main_frame, text="显存映射空间最小:").grid(row=3, column=0, sticky="e")
+    # 显存映射空间设置移到row=5和6
+    tk.Label(main_frame, text="显存映射空间最小:").grid(row=5, column=0, sticky="e")
     low_mem_var = tk.StringVar(value="1Gb")
-    tk.Entry(main_frame, textvariable=low_mem_var).grid(row=3, column=1, sticky="w")
-    tk.Label(main_frame, text="显存映射空间最大").grid(row=4, column=0, sticky="e")
+    tk.Entry(main_frame, textvariable=low_mem_var).grid(row=5, column=1, sticky="w")
+    
+    tk.Label(main_frame, text="显存映射空间最大").grid(row=6, column=0, sticky="e")
     high_mem_var = tk.StringVar(value="32GB")
-    tk.Entry(main_frame, textvariable=high_mem_var).grid(row=4, column=1, sticky="w")
-    tk.Button(main_frame, text="保存", command=save_gpu_settings).grid(row=5, column=0, pady=15)
-    tk.Button(main_frame, text="取消", command=lambda:GPU_window.destroy()).grid(row=5, column=1)
+    tk.Entry(main_frame, textvariable=high_mem_var).grid(row=6, column=1, sticky="w")
+    
+    # 保存和取消按钮移到row=7
+    tk.Button(main_frame, text="应用", command=save_gpu_settings).grid(row=7, column=0, pady=15)
+    tk.Button(main_frame, text="保存", command=save_config).grid(row=7, column=2)
+    tk.Button(main_frame, text="取消", command=lambda:GPU_window.destroy()).grid(row=7, column=2)
 
     center_window(GPU_window)
 
