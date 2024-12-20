@@ -15,6 +15,7 @@ import os
 import logging
 import threading
 import win32com.client
+from tkintertools.core.containers import Tk, Frame # <-- 新增
 
 # 设置窗口居中
 def center_window(window):
@@ -23,7 +24,7 @@ def center_window(window):
     height = window.winfo_height()
     x = (window.winfo_screenwidth() // 2) - (width // 2)
     y = (window.winfo_screenheight() // 2) - (height // 2)
-    window.geometry(f"{width}x{height}+{x}+{y}")
+    window.geometry(size=(width, height), position=(x, y))
 
 # 添加一个通用的创建隐藏终端的 startupinfo
 def create_hidden_startupinfo():
@@ -506,13 +507,16 @@ logging.basicConfig(
 )
 
 # 创建主窗口
-root = tk.Tk()
-root.title("Hyper-V 管理工具")
-root.minsize(300, 300)  # 设置最小窗口大小
-
+# root = tk.Tk()
+root = Tk(
+    size=(300, 300),
+    title="Hyper-V 管理工具",
+)
+root.center()
 # 创建状态框架
-status_frame = tk.Frame(root)
-status_frame.pack(fill=tk.BOTH, expand=True, padx=15, pady=10)
+# status_frame = tk.Frame(root)
+status_frame = Frame(root)
+status_frame.pack(fill="both", expand=True, padx=15, pady=10)
 
 # 创建标题框架
 title_frame = tk.Frame(status_frame)
@@ -570,8 +574,9 @@ save_button.grid(row=7, column=0, padx=5, pady=10, sticky="w")
 save_button = tk.Button(status_frame, text="关闭", command=exit,foreground="red")
 save_button.grid(row=7, column=1, padx=5, pady=10, sticky="ew")
 
-# 设置窗口居中
-center_window(root)
+
+# 设置主题 (可选使用深色或浅色):
+root.theme(dark=True)
 
 # 主循环
 root.mainloop()
