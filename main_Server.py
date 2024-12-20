@@ -2,6 +2,7 @@
 # pyinstaller -F -n Server --noconsole main_Server.py
 
 import ctypes
+import json
 import sys
 import tkinter as tk
 from tkinter import messagebox,filedialog
@@ -315,18 +316,46 @@ def set_gpu_virtualization():
         directory_path = filedialog.askdirectory()
         if directory_path:
             gpu_driver_var.set(directory_path)
-            # gpu_driver_entry.insert(0, directory_path)
         else:
             messagebox.showwarning("提示", "未选择任何文件夹。")
 
-    def save_config():
+    def save_config(vm_name):
         try:
-            with open(f"{appdata_path}\\config.txt", "w") as f:
-                f.write(f"{vm_name}\n{gpu_partition_var.get()}\n{gpu_driver_var.get()}\n{low_mem_var.get()}\n{high_mem_var.get()}")
-            messagebox.showinfo("成功", "配置已保存。")
+            # 创建配置字典
+            config = {
+                "vm_name": vm_name,
+                "gpu_partition": gpu_partition_var.get(),
+                "gpu_driver": gpu_driver_var.get(),
+                "low_mem": low_mem_var.get(),
+                "high_mem": high_mem_var.get()
+            }
+            # 保存配置到 JSON 文件
+            with open(f"{appdata_path}\\{vm_name}_config.json", "w") as f:
+                json.dump(config, f, indent=4)
+            toast.config(text=f"{vm_name}配置已保存。", foreground="blue")
+            logging.info(f"{vm_name}配置已保存。")
         except Exception as e:
             messagebox.showerror("错误", f"保存配置失败：{e}")
             logging.error(f"保存配置失败: {e}")
+
+    def check(vm_name):
+        try:
+            # 读取配置文件
+            with open(f"{appdata_path}\\{vm_name}_config.json", "r") as f:
+                config = json.load(f)
+                # 设置 Tkinter 变量
+                gpu_partition_var.set(config.get("gpu_partition", ""))
+                gpu_driver_var.set(config.get("gpu_driver", ""))
+                low_mem_var.set(config.get("low_mem", ""))
+                high_mem_var.set(config.get("high_mem", ""))
+                logging.info(f"{vm_name}配置成功读取")
+                toast.config(text=f"{vm_name}配置成功读取", foreground="blue")
+        except FileNotFoundError:
+            logging.info(f"{vm_name}配置文件未找到")
+            toast.config(text=f"{vm_name}配置文件未找到", foreground="red")
+        except Exception as e:
+            logging.error(f"读取{vm_name}配置出错: {e}")
+            toast.config(text=f"读取{vm_name}配置出错：{e}", foreground="red")
     
     # 判断是否拥有管理员权限
     def is_admin():
@@ -350,7 +379,7 @@ def set_gpu_virtualization():
         GPU_window.title("GPU 虚拟化(管理员)")
     else:
         GPU_window.title("GPU 虚拟化(低权限)")
-    GPU_window.minsize(500, 240)  # 设置最小窗口大小
+    GPU_window.minsize(500, 260)  # 设置最小窗口大小
     # 创建主框架
     main_frame = tk.Frame(GPU_window)
     main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
@@ -366,13 +395,14 @@ def set_gpu_virtualization():
     title_frame.grid_columnconfigure(0, weight=1)
     title_frame.grid_columnconfigure(1, weight=1)
 
-    tk.Label(title_frame, text=f"当前虚拟机: {vm_name}").grid(row=0, column=0, sticky="w")
+    toast=tk.Label(title_frame,text="加载中......",foreground="blue")
+    toast.grid(row=0,column=0,sticky="w")
+
     tk.Button(title_frame, text="获取管理员权限", command=get_administrator_privileges).grid(row=0, column=1, sticky="e")
 
     # 其他控件使用相对布局
     tk.Label(main_frame, text="GPU 分区路径：").grid(row=1, column=0, sticky="e", pady=5)
     gpu_partition_var = tk.StringVar(value="获取中,请稍候.....")
-
     tk.Entry(main_frame, textvariable=gpu_partition_var, state='readonly').grid(row=1, column=1, sticky="ew", padx=5)
 
     # 自动获取 GPU 虚拟化状态并填入 GPU 分区路径
@@ -382,25 +412,24 @@ def set_gpu_virtualization():
     else:
         gpu_partition_var.set("获取失败或未设置")
 
-    # 在GPU分区路径下面添加GPU驱动路径选择
-    tk.Label(main_frame, text="GPU 驱动路径：").grid(row=3, column=0, sticky="e", pady=5)
-    gpu_driver_var = tk.StringVar(value="")
-    tk.Entry(main_frame, textvariable=gpu_driver_var, state='readonly').grid(row=3, column=1, sticky="ew", padx=5)
-    tk.Button(main_frame, text="选择路径", command=select_gpu_driver_path).grid(row=3, column=1, sticky="e")
-
     # 显示映射一般默认即可的标签移到row=4
     tk.Label(main_frame, text="显存映射一般默认即可").grid(row=4, column=0,sticky="es")
     
     # 删除和选择GPU分区按钮移到row=2
     delete_button = tk.Button(main_frame, text="删除 GPU 分区", command=delete)
     select_button = tk.Button(main_frame, text="选择 GPU 分区", command=query_gpu_partitions)
-    
     if gpu_status and "InstancePath" in gpu_status:
-        delete_button.grid(row=2, column=1, padx=5, pady=5, sticky="e")
+        delete_button.grid(row=1, column=1, padx=5, sticky="e")
         select_button.grid_remove()
     else:
-        select_button.grid(row=2, column=1, padx=5, pady=5, sticky="e")
+        select_button.grid(row=1, column=1, padx=5, sticky="e")
         delete_button.grid_remove()
+    
+    # 添加GPU驱动路径选择
+    tk.Label(main_frame, text="GPU 驱动路径：").grid(row=3, column=0, sticky="e", pady=5)
+    gpu_driver_var = tk.StringVar(value="")
+    tk.Entry(main_frame, textvariable=gpu_driver_var, state='readonly').grid(row=3, column=1, sticky="ew", padx=5)
+    tk.Button(main_frame, text="选择路径", command=select_gpu_driver_path).grid(row=3, column=1, sticky="e")
 
     # 显存映射空间设置移到row=5和6
     tk.Label(main_frame, text="显存映射空间最小:").grid(row=5, column=0, sticky="e")
@@ -412,10 +441,10 @@ def set_gpu_virtualization():
     tk.Entry(main_frame, textvariable=high_mem_var).grid(row=6, column=1, sticky="w")
     
     # 保存和取消按钮移到row=7
-    tk.Button(main_frame, text="应用", command=save_gpu_settings).grid(row=7, column=0, pady=15)
-    tk.Button(main_frame, text="保存", command=save_config).grid(row=7, column=2)
-    tk.Button(main_frame, text="取消", command=lambda:GPU_window.destroy()).grid(row=7, column=2)
-
+    tk.Button(main_frame, text="应用", command=save_gpu_settings,foreground="green").grid(row=7, column=0, pady=15)
+    tk.Button(main_frame, text="保存配置", command=lambda:save_config(vm_name),foreground="blue").grid(row=7, column=1)
+    tk.Button(main_frame, text="取消", command=lambda:GPU_window.destroy(),foreground="orange").grid(row=7, column=2)
+    check(vm_name)
     center_window(GPU_window)
 
 def exit():
