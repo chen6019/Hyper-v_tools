@@ -6,9 +6,9 @@ pyinstaller -F -n Server --noconsole main_Server.py
 
 import ctypes
 import json
-from math import log
 import sys
 import tkinter as tk
+import tkinter.ttk as ttk
 from tkinter import messagebox,filedialog
 import subprocess
 import os
@@ -64,10 +64,10 @@ def parse_vm_status(vm_status):
     return names, states
 
 def update_vm_list(names, states):
-    vm_list.delete(0, tk.END)
+    vm_list.delete(*vm_list.get_children())
     for name, state in zip(names, states):
         display_text = f"{name} {state}"
-        vm_list.insert(tk.END, display_text)
+        vm_list.insert('', 'end', text=display_text)
 
 # 定义启动虚拟机的工作函数
 def start_vm_process(vm_name):
@@ -93,11 +93,11 @@ def stop_vm_process(vm_name):
 
 # 修改 start_vm 函数
 def start_vm():
-    selected = vm_list.curselection()
+    selected = vm_list.selection()
     if not selected:
         messagebox.showwarning("警告", "请选择一个虚拟机。")
         return
-    display_text = vm_list.get(selected[0])
+    display_text = vm_list.item(selected[0], 'text')
     vm_name = display_text.split(" ", 1)[0]  # 获取名称部分
     
     run_in_thread(start_vm_process, vm_name)
@@ -107,11 +107,11 @@ def start_vm():
 
 # 修改 stop_vm 函数
 def stop_vm():
-    selected = vm_list.curselection()
+    selected = vm_list.selection()
     if not selected:
         messagebox.showwarning("警告", "请选择一个虚拟机。")
         return
-    display_text = vm_list.get(selected[0])
+    display_text = vm_list.item(selected[0], 'text')
     vm_name = display_text.split(" ", 1)[0]  # 获取名称部分
 
     # 弹出确认对话框
@@ -124,11 +124,11 @@ def stop_vm():
 
 # 打开虚拟机远程连接
 def open_vm_connect():
-    selected = vm_list.curselection()
+    selected = vm_list.selection()
     if not selected:
         messagebox.showwarning("警告", "请选择一个虚拟机。")
         return
-    display_text = vm_list.get(selected[0])
+    display_text = vm_list.item(selected[0], 'text')
     vm_name = display_text.split(" ", 1)[0]  # 获取名称部分
 
     try:
@@ -188,11 +188,11 @@ def check_gpu_virtualization_status(vm):
 
 # 设置 GPU 虚拟化
 def set_gpu_virtualization():
-    selected = vm_list.curselection()
+    selected = vm_list.selection()
     if not selected:
         messagebox.showwarning("警告", "请选择一个虚拟机。")
         return
-    display_text = vm_list.get(selected[0])
+    display_text = vm_list.item(selected[0], 'text')
     vm_name = display_text.split(" ", 1)[0]
 
     # 保存和取消按钮
@@ -258,17 +258,17 @@ def set_gpu_virtualization():
             select_window.title("选择 GPU")
             select_window.minsize(400, 300)
 
-            main_frame = tk.Frame(select_window)
+            main_frame = ttk.Frame(select_window)
             main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
             main_frame.grid_columnconfigure(0, weight=1)
             main_frame.grid_rowconfigure(1, weight=1)
 
-            tk.Label(main_frame, text="请选择要使用的 GPU分区：").grid(row=0, column=0, sticky="w")
+            ttk.Label(main_frame, text="请选择要使用的 GPU分区：").grid(row=0, column=0, sticky="w")
             gpu_listbox = tk.Listbox(main_frame)
             gpu_listbox.grid(row=1, column=0, sticky="nsew", padx=5, pady=5)
 
-            button_frame = tk.Frame(main_frame)
+            button_frame = ttk.Frame(main_frame)
             button_frame.grid(row=2, column=0, sticky="ew", pady=5)
             button_frame.grid_columnconfigure(0, weight=1)
             button_frame.grid_columnconfigure(1, weight=1)
@@ -291,9 +291,9 @@ def set_gpu_virtualization():
 
             # 添加双击事件绑定
             gpu_listbox.bind('<Double-Button-1>', lambda e: on_select())
-            tk.Button(main_frame, text="打开设备管理器", command=open_device_manager).grid(row=0, column=0, sticky="e")
-            tk.Button(button_frame, text="确定", command=on_select).grid(row=2, column=0, sticky="nw", padx=5, pady=5)
-            tk.Button(button_frame, text="取消", command=lambda:select_window.destroy()).grid(row=2, column=0, sticky="ne", padx=5, pady=5)
+            ttk.Button(main_frame, text="打开设备管理器", command=open_device_manager).grid(row=0, column=0, sticky="e")
+            ttk.Button(button_frame, text="确定", command=on_select).grid(row=2, column=0, sticky="nw", padx=5, pady=5)
+            ttk.Button(button_frame, text="取消", command=lambda:select_window.destroy()).grid(row=2, column=0, sticky="ne", padx=5, pady=5)
             center_window(select_window)
 
         except Exception as e:
@@ -340,7 +340,7 @@ def set_gpu_virtualization():
             # 保存配置到 JSON 文件
             with open(f"{appdata_path}\\{vm_name}_config.json", "w") as f:
                 json.dump(config, f, indent=4)
-            toast.config(text=f"{vm_name} 配置已保存。", foreground="blue")
+            toast.config(text=f"{vm_name} 配置已保存。")
             logging.info(f"{vm_name} 配置已保存。")
         except ValueError as ve:
             messagebox.showerror("错误", "保存配置失败：值错误或输入错误")
@@ -364,19 +364,19 @@ def set_gpu_virtualization():
                 low_mem_var.set(config.get("low_mem", 1))
                 high_mem_var.set(config.get("high_mem", 32))
                 logging.info(f"{vm_name}配置成功读取")
-                toast.config(text=f"{vm_name}配置成功读取", foreground="blue")
+                toast.config(text=f"{vm_name}配置成功读取")
         except FileNotFoundError:
             logging.info(f"{vm_name}配置文件未找到")
-            toast.config(text=f"{vm_name}配置文件未找到", foreground="red")
+            toast.config(text=f"{vm_name}配置文件未找到")
         except json.JSONDecodeError:
             logging.error(f"{vm_name}配置文件格式错误")
-            toast.config(text=f"{vm_name}配置文件格式错误", foreground="red")
+            toast.config(text=f"{vm_name}配置文件格式错误")
         except ValueError as ve:
             logging.error(f"{vm_name}配置文件错误: 值错误!")
-            toast.config(text=f"{vm_name}配置文件错误: {ve}", foreground="red")
+            toast.config(text=f"{vm_name}配置文件错误: {ve}")
         except Exception as e:
             logging.error(f"读取{vm_name}配置出错: {e}")
-            toast.config(text=f"读取{vm_name}配置出错：未知错误!", foreground="red")
+            toast.config(text=f"读取{vm_name}配置出错：未知错误!")
     
     # 判断是否拥有管理员权限
     def is_admin():
@@ -402,7 +402,7 @@ def set_gpu_virtualization():
         GPU_window.title("GPU 虚拟化(低权限)")
     GPU_window.minsize(500, 260)  # 设置最小窗口大小
     # 创建主框架
-    main_frame = tk.Frame(GPU_window)
+    main_frame = ttk.Frame(GPU_window)
     main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
     # 配置网格权重
@@ -411,23 +411,23 @@ def set_gpu_virtualization():
 
 
     # 标题行
-    title_frame = tk.Frame(main_frame)
+    title_frame = ttk.Frame(main_frame)
     title_frame.grid(row=0, column=0, columnspan=2, sticky="ew")
     title_frame.grid_columnconfigure(0, weight=1)
     title_frame.grid_columnconfigure(1, weight=1)
 
-    toast=tk.Label(title_frame,text="加载中......",foreground="blue")
+    toast = ttk.Label(title_frame, text="加载中......",style="i.TLabel")
     toast.grid(row=0,column=0,sticky="w")
 
-    admin_button=tk.Button(title_frame, text="获取管理员权限", command=get_administrator_privileges,foreground="red")
-    admin_button.grid(row=0, column=1, sticky="e")
+    admin_button = ttk.Button(title_frame, text="获取管理员权限", command=get_administrator_privileges,style="e.TButton")
+    admin_button.grid(row=0, column=2, sticky="e")
     if is_admin():
         admin_button.grid_remove()
 
     # 其他控件使用相对布局
-    tk.Label(main_frame, text="GPU 分区路径：").grid(row=1, column=0, sticky="e", pady=5)
+    ttk.Label(main_frame, text="GPU 分区路径：").grid(row=1, column=0, sticky="e", pady=5)
     gpu_partition_var = tk.StringVar(value="获取中,请稍候.....")
-    tk.Entry(main_frame, textvariable=gpu_partition_var, state='readonly').grid(row=1, column=1, sticky="ew", padx=5)
+    ttk.Entry(main_frame, textvariable=gpu_partition_var, state='readonly').grid(row=1, column=1, sticky="ew", padx=5)
 
     # 自动获取 GPU 虚拟化状态并填入 GPU 分区路径
     gpu_status = check_gpu_virtualization_status(vm_name)
@@ -437,11 +437,11 @@ def set_gpu_virtualization():
         gpu_partition_var.set("获取失败或未设置")
 
     # 显示映射一般默认即可的标签移到row=4
-    tk.Label(main_frame, text="显存映射一般默认即可").grid(row=4, column=0,sticky="es")
+    ttk.Label(main_frame, text="显存映射一般默认即可").grid(row=4, column=0,sticky="es")
     
     # 删除和选择GPU分区按钮移到row=2
-    delete_button = tk.Button(main_frame, text="删除 GPU 分区", command=delete)
-    select_button = tk.Button(main_frame, text="选择 GPU 分区", command=query_gpu_partitions)
+    delete_button = ttk.Button(main_frame, text="删除 GPU 分区", command=delete)
+    select_button = ttk.Button(main_frame, text="选择 GPU 分区", command=query_gpu_partitions)
     if gpu_status and "InstancePath" in gpu_status:
         delete_button.grid(row=1, column=1, padx=5, sticky="e")
         select_button.grid_remove()
@@ -450,10 +450,10 @@ def set_gpu_virtualization():
         delete_button.grid_remove()
     
     # 添加GPU驱动路径选择
-    tk.Label(main_frame, text="GPU 驱动路径：").grid(row=3, column=0, sticky="e", pady=5)
+    ttk.Label(main_frame, text="GPU 驱动路径：").grid(row=3, column=0, sticky="e", pady=5)
     gpu_driver_var = tk.StringVar(value="")
-    tk.Entry(main_frame, textvariable=gpu_driver_var, state='readonly').grid(row=3, column=1, sticky="ew", padx=5)
-    tk.Button(main_frame, text="选择路径", command=select_gpu_driver_path).grid(row=3, column=1, sticky="e")
+    ttk.Entry(main_frame, textvariable=gpu_driver_var, state='readonly').grid(row=3, column=1, sticky="ew", padx=5)
+    ttk.Button(main_frame, text="选择路径", command=select_gpu_driver_path).grid(row=3, column=1, sticky="e")
 
     # 显存映射空间设置移到row=5和6
     def validate_int_input(P):
@@ -464,19 +464,19 @@ def set_gpu_virtualization():
     
     vcmd = (root.register(validate_int_input), '%P')
     
-    tk.Label(main_frame, text="显存映射空间最小:").grid(row=5, column=0, sticky="e")
-    tk.Label(main_frame, text="GB").grid(row=5, column=1, sticky="s")
+    ttk.Label(main_frame, text="显存映射空间最小:").grid(row=5, column=0, sticky="e")
+    ttk.Label(main_frame, text="GB").grid(row=5, column=1, sticky="s")
     low_mem_var = tk.IntVar(value=1)
-    tk.Entry(main_frame, textvariable=low_mem_var, validate="key", validatecommand=vcmd).grid(row=5, column=1, sticky="w")
+    ttk.Entry(main_frame, textvariable=low_mem_var, validate="key", validatecommand=vcmd).grid(row=5, column=1, sticky="w")
     
-    tk.Label(main_frame, text="显存映射空间最大:").grid(row=6, column=0, sticky="e")
-    tk.Label(main_frame, text="GB").grid(row=6, column=1, sticky="s")
+    ttk.Label(main_frame, text="显存映射空间最大:").grid(row=6, column=0, sticky="e")
+    ttk.Label(main_frame, text="GB").grid(row=6, column=1, sticky="s")
     high_mem_var = tk.IntVar(value=32)
-    tk.Entry(main_frame, textvariable=high_mem_var, validate="key", validatecommand=vcmd).grid(row=6, column=1, sticky="w")
+    ttk.Entry(main_frame, textvariable=high_mem_var, validate="key", validatecommand=vcmd).grid(row=6, column=1, sticky="w")
     # 保存和取消按钮移到row=7
-    tk.Button(main_frame, text="应用", command=save_gpu_settings,foreground="green").grid(row=7, column=0, pady=15)
-    tk.Button(main_frame, text="保存配置", command=lambda:save_config(vm_name),foreground="blue").grid(row=7, column=1)
-    tk.Button(main_frame, text="取消", command=lambda:GPU_window.destroy(),foreground="orange").grid(row=7, column=2)
+    ttk.Button(main_frame, text="应用", command=save_gpu_settings,style="k.TButton").grid(row=7, column=0, pady=15)
+    ttk.Button(main_frame, text="保存配置", command=lambda:save_config(vm_name),style="i.TButton").grid(row=7, column=1)
+    ttk.Button(main_frame, text="取消", command=lambda:GPU_window.destroy(),style="e.TButton").grid(row=7, column=2)
     check(vm_name)
     center_window(GPU_window)
 
@@ -510,35 +510,38 @@ root = tk.Tk()
 root.title("Hyper-V 管理工具")
 root.minsize(300, 300)  # 设置最小窗口大小
 
+style = ttk.Style()
+style.configure("i.TLabel", foreground="blue")
+style.configure("e.TLabel", foreground="red")
+style.configure("k.TLabel", foreground="green")
+style.configure("i.TButton", foreground="blue")
+style.configure("e.TButton", foreground="red")
+
 # 创建状态框架
-status_frame = tk.Frame(root)
+status_frame = ttk.Frame(root)
 status_frame.pack(fill=tk.BOTH, expand=True, padx=15, pady=10)
 
 # 创建标题框架
-title_frame = tk.Frame(status_frame)
+title_frame = ttk.Frame(status_frame)
 title_frame.grid(row=0, column=0, columnspan=2, sticky="ew")
 title_frame.grid_columnconfigure(0, weight=1)
 title_frame.grid_columnconfigure(1, weight=1)
 
 # 添加提示标签到标题框架
-tk.Label(title_frame, text="名称:", justify=tk.LEFT).grid(row=0, column=0, sticky="w")
-tk.Label(title_frame, text="状态", justify=tk.LEFT).grid(row=0, column=0, sticky="e")
-tk.Label(title_frame, text="工具", justify=tk.LEFT).grid(row=0, column=1, sticky="e")
+ttk.Label(title_frame, text="名称:", justify=tk.LEFT).grid(row=0, column=0, sticky="w")
+ttk.Label(title_frame, text="状态", justify=tk.LEFT).grid(row=0, column=0, sticky="e")
+ttk.Label(title_frame, text="工具:", justify=tk.LEFT).grid(row=0, column=1, sticky="n")
 
 # 配置网格权重
 status_frame.grid_columnconfigure(0, weight=3)  # 列表框占更多空间
 status_frame.grid_columnconfigure(1, weight=1)  # 按钮占更少空间
 status_frame.grid_rowconfigure(1, weight=1)     # 让列表框可以垂直扩展
 
-# 创建虚拟机状态列表框
-vm_list = tk.Listbox(status_frame)
+# 用 Treeview 替换原 tk.Listbox
+vm_list = ttk.Treeview(status_frame, show='tree')
 vm_list.grid(row=1, column=0, rowspan=4, sticky="nsew", padx=5, pady=5)
-# 添加双击事件绑定
-vm_list.bind('<Double-Button-1>', lambda e: run_in_thread(set_gpu_virtualization))
+vm_list.bind('<Double-1>', lambda e: run_in_thread(set_gpu_virtualization))
 
-# 添加刷新按钮
-refresh_button = tk.Button(status_frame, text="刷新", command=lambda:run_in_thread(refresh_vm_status))
-refresh_button.grid(row=5, column=0)
 
 # 获取虚拟机状态并显示在列表框中
 vm_status = show_vm_status()
@@ -546,28 +549,28 @@ names, states = parse_vm_status(vm_status)
 update_vm_list(names, states)
 
 # 添加启动和关闭按钮到 status_frame 中
-start_button = tk.Button(status_frame, text="启动", command=lambda:run_in_thread(start_vm))
-start_button.grid(row=5, column=0, padx=5, pady=5, sticky="w")
+start_button = ttk.Button(status_frame, text="启动", command=lambda:run_in_thread(start_vm))
+start_button.grid(row=5, column=0, padx=2, pady=5, sticky="w")
 
-stop_button = tk.Button(status_frame, text="关闭", command=lambda:run_in_thread(stop_vm),foreground="red")
-stop_button.grid(row=5, column=0, padx=5, pady=5, sticky="e")
+stop_button = ttk.Button(status_frame, text="关闭", command=lambda:run_in_thread(stop_vm),style="e.TButton")
+stop_button.grid(row=5, column=0, padx=2, pady=5, sticky="e")
 
 # 添加设置和关闭 GPU 虚拟化按钮到 status_frame 中
-set_gpu_button = tk.Button(status_frame, text="GPU 虚拟化", command=lambda:run_in_thread(set_gpu_virtualization))
+set_gpu_button = ttk.Button(status_frame, text="GPU 虚拟化", command=lambda:run_in_thread(set_gpu_virtualization))
 set_gpu_button.grid(row=1, column=1, padx=5, pady=5, sticky="e")
 
-Remote_connection_button = tk.Button(status_frame, text="连接虚拟机", command=lambda:run_in_thread(open_vm_connect))
+Remote_connection_button = ttk.Button(status_frame, text="连接虚拟机", command=lambda:run_in_thread(open_vm_connect))
 Remote_connection_button.grid(row=2, column=1, padx=5, pady=5, sticky="e")
 
-settings_button = tk.Button(status_frame, text="Hyper-V管理器", command=lambda: run_in_thread(open_hyper_v_manager))
+settings_button = ttk.Button(status_frame, text="Hyper-V管理器", command=lambda: run_in_thread(open_hyper_v_manager))
 settings_button.grid(row=3, column=1, padx=5, pady=5, sticky="e")
 
 # 添加按钮
-save_button = tk.Button(status_frame, text="打开日志文件夹", command=open_config_folder)
+save_button = ttk.Button(status_frame, text="打开日志文件夹", command=open_config_folder)
 save_button.grid(row=7, column=0, padx=5, pady=10, sticky="w")
 
 # 添加取消按钮
-save_button = tk.Button(status_frame, text="关闭", command=exit,foreground="red")
+save_button = ttk.Button(status_frame, text="关闭", command=exit)
 save_button.grid(row=7, column=1, padx=5, pady=10, sticky="ew")
 
 # 设置窗口居中
