@@ -479,7 +479,7 @@ def set_gpu_virtualization():
     tk.Button(main_frame, text="保存配置", command=lambda:save_config(vm_name),foreground="blue").grid(row=7, column=1)
     tk.Button(main_frame, text="取消", command=lambda:GPU_window.destroy(),foreground="orange").grid(row=7, column=2)
     check(vm_name)
-    center_window(GPU_window)
+    # center_window(GPU_window)
 
 def exit():
     root.destroy()
