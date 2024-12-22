@@ -329,7 +329,7 @@ def set_gpu_virtualization():
 
     def save_config(vm_name):
         try:
-            #判断GPU分区是否为错误文本,如果是则不保存对应配置
+            #判断GPU分区是否为错误文本
             if gpu_partition_var.get() == "获取失败或未设置":
                 toast.config(text=f"{vm_name} 保存配置失败：GPU分区未设置")
                 return
