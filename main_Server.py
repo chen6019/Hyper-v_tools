@@ -321,6 +321,8 @@ def set_gpu_virtualization():
 
     # GPU 选择驱动路径
     def select_gpu_driver_path():
+        messagebox.showwarning("提示", "这个功能还没有写好\n目前没有任何作用\n需要在以后加入自动更新驱动后可用")
+        return
         directory_path = filedialog.askdirectory()
         if directory_path:
             gpu_driver_var.set(directory_path)
@@ -328,6 +330,8 @@ def set_gpu_virtualization():
             messagebox.showwarning("提示", "未选择任何文件夹。")
 
     def save_config(vm_name):
+        messagebox.showwarning("提示", "这个功能还没有写好\n设置GPU虚拟化也用不到这个\n需要在以后加入自动更新驱动后才可用")
+        return
         try:
             #判断GPU分区是否为错误文本
             if gpu_partition_var.get() == "获取失败或未设置":
@@ -441,7 +445,7 @@ def set_gpu_virtualization():
         gpu_partition_var.set("获取失败或未设置")
 
     # 显示映射一般默认即可的标签移到row=4
-    ttk.Label(main_frame, text="显存映射一般默认即可").grid(row=4, column=0,sticky="es")
+    ttk.Label(main_frame, text="内存映射I/O空间一般默认即可").grid(row=4, column=0,sticky="es")
     
     # 删除和选择GPU分区按钮移到row=2
     delete_button = ttk.Button(main_frame, text="删除 GPU 分区", command=delete)
@@ -468,12 +472,12 @@ def set_gpu_virtualization():
     
     vcmd = (root.register(validate_int_input), '%P')
     
-    ttk.Label(main_frame, text="显存映射空间最小:").grid(row=5, column=0, sticky="e")
+    ttk.Label(main_frame, text="内存映射I/O空间最小:").grid(row=5, column=0, sticky="e")
     ttk.Label(main_frame, text="GB").grid(row=5, column=1, sticky="s")
     low_mem_var = tk.IntVar(value=1)
     ttk.Entry(main_frame, textvariable=low_mem_var, validate="key", validatecommand=vcmd).grid(row=5, column=1, sticky="w")
     
-    ttk.Label(main_frame, text="显存映射空间最大:").grid(row=6, column=0, sticky="e")
+    ttk.Label(main_frame, text="内存映射I/O空间最大:").grid(row=6, column=0, sticky="e")
     ttk.Label(main_frame, text="GB").grid(row=6, column=1, sticky="s")
     high_mem_var = tk.IntVar(value=32)
     ttk.Entry(main_frame, textvariable=high_mem_var, validate="key", validatecommand=vcmd).grid(row=6, column=1, sticky="w")
