@@ -203,11 +203,11 @@ def set_gpu_virtualization():
             GPU_window.destroy()
             return
         low_mem: str = str(low_mem_var.get() or 1)
-        high_mem: str = str(high_mem_var.get() or 32)
+        high_mem: str = str(high_mem_var.get() or 64)
         low_mem = low_mem + "GB"
-        logging.info(f"设置显存映射空间最小: {low_mem}")
+        logging.info(f"设置内存映射I/O空间最小: {low_mem}")
         high_mem = high_mem + "GB"
-        logging.info(f"设置显存映射空间最大: {high_mem}")
+        logging.info(f"设置内存映射I/O空间最大: {high_mem}")
         try:
             # 构建 PowerShell 命令
             ps_command = f'''
@@ -370,7 +370,7 @@ def set_gpu_virtualization():
                 gpu_partition_var.set(config.get("gpu_partition", ""))
                 gpu_driver_var.set(config.get("gpu_driver", ""))
                 low_mem_var.set(config.get("low_mem", 1))
-                high_mem_var.set(config.get("high_mem", 32))
+                high_mem_var.set(config.get("high_mem", 64))
                 logging.info(f"{vm_name}配置成功读取")
                 toast.config(text=f"{vm_name}配置成功读取")
         except FileNotFoundError:
@@ -444,7 +444,7 @@ def set_gpu_virtualization():
     else:
         gpu_partition_var.set("获取失败或未设置")
 
-    # 显示映射一般默认即可的标签移到row=4
+    # 映射一般默认即可的标签移到row=4
     ttk.Label(main_frame, text="内存映射I/O空间一般默认即可").grid(row=4, column=0,sticky="es")
     
     # 删除和选择GPU分区按钮移到row=2
@@ -463,7 +463,7 @@ def set_gpu_virtualization():
     ttk.Entry(main_frame, textvariable=gpu_driver_var, state='readonly').grid(row=3, column=1, sticky="ew", padx=5)
     ttk.Button(main_frame, text="选择路径", command=select_gpu_driver_path).grid(row=3, column=1, sticky="e")
 
-    # 显存映射空间设置移到row=5和6
+    # 内存映射空间设置移到row=5和6
     def validate_int_input(P):
         if P.isdigit() or P == "":
             return True
@@ -479,7 +479,7 @@ def set_gpu_virtualization():
     
     ttk.Label(main_frame, text="内存映射I/O空间最大:").grid(row=6, column=0, sticky="e")
     ttk.Label(main_frame, text="GB").grid(row=6, column=1, sticky="s")
-    high_mem_var = tk.IntVar(value=32)
+    high_mem_var = tk.IntVar(value=64)
     ttk.Entry(main_frame, textvariable=high_mem_var, validate="key", validatecommand=vcmd).grid(row=6, column=1, sticky="w")
     # 保存和取消按钮移到row=7
     ttk.Button(main_frame, text="应用", command=save_gpu_settings,style="k.TButton").grid(row=7, column=0, pady=15)
