@@ -6,7 +6,6 @@ pyinstaller -F -n Server --noconsole main_Server.py
 
 import ctypes
 import json
-from math import log
 import sys
 import tkinter as tk
 from tkinter import messagebox,filedialog
@@ -15,7 +14,7 @@ import os
 import logging
 import threading
 import win32com.client
-from tkintertools.core.containers import Tk, Frame # <-- 新增
+from tkintertools.core.containers import Tk, Frame
 
 # 设置窗口居中
 def center_window(window):
