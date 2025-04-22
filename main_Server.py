@@ -6,6 +6,7 @@ pyinstaller -F -n Server --noconsole main_Server.py
 
 import ctypes
 import json
+import shlex
 import sys
 import tkinter as tk
 import tkinter.ttk as ttk
@@ -31,6 +32,23 @@ def create_hidden_startupinfo():
     startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
     startupinfo.wShowWindow = subprocess.SW_HIDE
     return startupinfo
+    
+# 判断是否拥有管理员权限
+def is_admin():
+    try:
+        return ctypes.windll.shell32.IsUserAnAdmin()
+    except Exception:
+        return False
+    
+# 获取管理员权限
+def get_administrator_privileges(win_name):
+    confirm = messagebox.askyesno("确认", "您确定要以管理员权限重新运行吗？")
+    if confirm:
+        ctypes.windll.shell32.ShellExecuteW(None,"runas", sys.executable, __file__, None, 0)
+        exit()
+    else:
+        messagebox.showinfo("取消","你取消了管理员权限重启!\n可能会设置失败!")
+        win_name.destroy()
 
 def show_vm_status():
     # PowerShell 命令获取虚拟机状态
@@ -152,6 +170,171 @@ def open_hyper_v_manager():
     except Exception as e:
         logging.error(f"无法打开 Hyper-V 管理器: {e}")
         messagebox.showerror("错误", "无法打开 Hyper-V 管理器。\n请确保已开启 Hyper-V。")
+
+# 检查任务计划是否存在
+def check_task_exists(task_name):
+    scheduler = win32com.client.Dispatch("Schedule.Service")
+    scheduler.Connect()
+    root_folder = scheduler.GetFolder("\\")
+    for task in root_folder.GetTasks(0):
+        if task.Name == task_name:
+            return True
+    return False
+
+
+# 设置开机自启动
+def set_auto_start():
+    exe_path = os.path.join(
+        os.path.dirname(os.path.abspath(sys.argv[0])), "Server.exe"
+    )
+
+    # 检查文件是否存在
+    if not os.path.exists(exe_path):
+        messagebox.showerror(
+            "错误", "未找到 Server.exe 文件\n请检查文件是否存在"
+        )
+        return
+
+    quoted_exe_path = shlex.quote(exe_path)
+    result = subprocess.call(
+        f'schtasks /Create /SC ONLOGON /TN "自动更新GPU驱动" /TR "{quoted_exe_path}" /F',
+        shell=True,
+    )
+
+    scheduler = win32com.client.Dispatch("Schedule.Service")
+    scheduler.Connect()
+    root_folder = scheduler.GetFolder("\\")
+    task_definition = root_folder.GetTask("自动更新GPU驱动").Definition
+
+    principal = task_definition.Principal
+    principal.RunLevel = 1
+
+    settings = task_definition.Settings
+    settings.DisallowStartIfOnBatteries = False
+    settings.StopIfGoingOnBatteries = False
+    settings.ExecutionTimeLimit = "PT0S"
+
+    root_folder.RegisterTaskDefinition("自动更新GPU驱动", task_definition, 6, "", "", 3)
+    if result == 0:
+        messagebox.showinfo("提示", "创建开机自启动成功")
+        messagebox.showinfo("提示！", "移动位置后要重新设置哦！！")
+        check_task_exists("自动更新GPU驱动")
+    else:
+        messagebox.showerror("错误", "创建开机自启动失败")
+        check_task_exists("自动更新GPU驱动")
+
+# 移除开机自启动
+def remove_auto_start():
+    if messagebox.askyesno("确定？", "你确定要删除开机自启动任务吗？"):
+        delete_result = subprocess.call(
+            'schtasks /Delete /TN "自动更新GPU驱动" /F', shell=True
+        )
+        if delete_result == 0:
+            messagebox.showinfo("提示", "关闭开机自启动成功")
+            check_task_exists("自动更新GPU驱动")
+        else:
+            messagebox.showerror("错误", "关闭开机自启动失败")
+            check_task_exists("自动更新GPU驱动")
+
+def GUI_updata_driver():
+    selected = vm_list.selection()
+    if not selected:
+        messagebox.showwarning("警告", "请选择一个虚拟机。")
+        return
+    display_text = vm_list.item(selected[0], 'text')
+    vm_name = display_text.split(" ", 1)[0]  # 获取名称部分
+
+        # GPU 选择驱动路径
+    def select_gpu_driver_path():
+        directory_path = filedialog.askdirectory()
+        if directory_path:
+            gpu_driver_var.set(directory_path)
+        else:
+            messagebox.showwarning("提示", "未选择任何文件夹。")
+    def save_updata_driver_config(vm_name):
+        try:
+            # 创建配置字典
+            config = {
+                "vm_name": vm_name,
+                "gpu_driver": gpu_driver_var.get()
+            }
+            # 保存配置到 JSON 文件
+            with open(f"{appdata_path}\\{vm_name}_updata_driver_config.json", "w") as f:
+                json.dump(config, f, indent=4)
+            toast.config(text=f"{vm_name} 配置已保存。")
+            logging.info(f"{vm_name} 配置已保存。")
+        except ValueError as ve:
+            messagebox.showerror("错误", "保存配置失败：值错误或输入错误")
+            logging.error(f"保存配置失败: 值错误或输入错误{ve}")
+        except Exception as e:
+            messagebox.showerror("错误", "保存配置失败：未知错误")
+            logging.error(f"保存配置失败: {e}")
+    def check_updata_driver_config(vm_name):
+        try:
+            # 读取配置文件
+            config_path = f"{appdata_path}\\{vm_name}_updata_driver_config.json"
+            if os.path.getsize(config_path) == 0:
+                raise ValueError("配置文件为空")
+            
+            with open(config_path, "r") as f:
+                config = json.load(f)
+                # 设置 Tkinter 变量
+                gpu_driver_var.set(config.get("gpu_driver", ""))
+                logging.info(f"{vm_name}配置成功读取")
+                toast.config(text=f"{vm_name}配置成功读取")
+        except FileNotFoundError:
+            logging.info(f"{vm_name}配置文件未找到")
+            toast.config(text=f"{vm_name}配置文件未找到")
+        except json.JSONDecodeError:
+            logging.error(f"{vm_name}配置文件格式错误")
+            toast.config(text=f"{vm_name}配置文件格式错误")
+        except ValueError as ve:
+            logging.error(f"{vm_name}配置文件错误: 值错误!")
+            toast.config(text=f"{vm_name}配置文件错误: {ve}")
+        except Exception as e:
+            logging.error(f"读取{vm_name}配置出错: {e}")
+            toast.config(text=f"读取{vm_name}配置出错：未知错误!")
+    updata_driver = tk.Toplevel(root)
+    if is_admin():
+        updata_driver.title("GPU 驱动更新(管理员)")
+    else:
+        updata_driver.title("GPU 驱动更新(低权限)")
+    updata_driver.minsize(500, 260)  # 设置最小窗口大小
+    # 创建主框架
+    main_frame = ttk.Frame(updata_driver)
+    main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+    # 配置网格权重
+    main_frame.grid_columnconfigure(1, weight=1)  # 使输入框可以水平扩展
+    main_frame.grid_rowconfigure(1, weight=1)     # 让列表框可以垂直扩展
+    # 标题行
+    title_frame = ttk.Frame(main_frame)
+    title_frame.grid(row=0, column=0, columnspan=2, sticky="ew")
+    title_frame.grid_columnconfigure(0, weight=1)
+    title_frame.grid_columnconfigure(1, weight=1)
+
+    toast = ttk.Label(title_frame, text="加载中......",style="i.TLabel")
+    toast.grid(row=0,column=0,sticky="w")
+
+    admin_button = ttk.Button(title_frame, text="获取管理员权限", command=lambda:get_administrator_privileges(win_name=updata_driver),style="e.TButton")
+    admin_button.grid(row=0, column=2, sticky="e")
+    if is_admin():
+        admin_button.grid_remove()
+    # 开关按钮,启用和禁用GPU驱动自动更新
+    ttk.Button(main_frame, text="启用GPU驱动自动更新", style="i.TButton").grid(row=1, column=0, pady=5)
+        
+    # 添加GPU驱动路径选择
+    ttk.Label(main_frame, text="GPU 驱动路径：").grid(row=3, column=0, sticky="e", pady=5)
+    gpu_driver_var = tk.StringVar(value="")
+    ttk.Entry(main_frame, textvariable=gpu_driver_var, state='readonly').grid(row=3, column=1, sticky="ew", padx=5)
+    ttk.Button(main_frame, text="路径", command=select_gpu_driver_path).grid(row=3, column=1, sticky="e")
+
+    ttk.Button(main_frame, text="应用", command=set_auto_start,style="k.TButton").grid(row=7, column=0, pady=15)
+    ttk.Button(main_frame, text="保存配置", command=lambda:save_updata_driver_config(vm_name),style="i.TButton").grid(row=7, column=1)
+    ttk.Button(main_frame, text="取消", command=lambda:updata_driver.destroy(),style="e.TButton").grid(row=7, column=2)
+
+    check_updata_driver_config(vm_name)
+    center_window(updata_driver)
+
 
 # 在新线程中运行函数
 def run_in_thread(target, *args):
@@ -319,19 +502,7 @@ def set_gpu_virtualization():
             messagebox.showinfo("取消","你取消了删除GPU分区!!")
             GPU_window.destroy()
 
-    # GPU 选择驱动路径
-    def select_gpu_driver_path():
-        messagebox.showwarning("提示", "这个功能还没有写好\n目前没有任何作用\n需要在以后加入自动更新驱动后可用")
-        return
-        directory_path = filedialog.askdirectory()
-        if directory_path:
-            gpu_driver_var.set(directory_path)
-        else:
-            messagebox.showwarning("提示", "未选择任何文件夹。")
-
     def save_config(vm_name):
-        messagebox.showwarning("提示", "这个功能还没有写好\n设置GPU虚拟化也用不到这个\n需要在以后加入自动更新驱动后才可用")
-        return
         try:
             #判断GPU分区是否为错误文本
             if gpu_partition_var.get() == "获取失败或未设置":
@@ -341,7 +512,6 @@ def set_gpu_virtualization():
             config = {
                 "vm_name": vm_name,
                 "gpu_partition": gpu_partition_var.get(),
-                "gpu_driver": gpu_driver_var.get(),
                 "low_mem": low_mem_var.get(),
                 "high_mem": high_mem_var.get()
             }
@@ -362,13 +532,12 @@ def set_gpu_virtualization():
             # 读取配置文件
             config_path = f"{appdata_path}\\{vm_name}_config.json"
             if os.path.getsize(config_path) == 0:
-                raise ValueError("配置文件为空")
+                raise ValueError("文件为空")
             
             with open(config_path, "r") as f:
                 config = json.load(f)
                 # 设置 Tkinter 变量
                 gpu_partition_var.set(config.get("gpu_partition", ""))
-                gpu_driver_var.set(config.get("gpu_driver", ""))
                 low_mem_var.set(config.get("low_mem", 1))
                 high_mem_var.set(config.get("high_mem", 64))
                 logging.info(f"{vm_name}配置成功读取")
@@ -381,27 +550,10 @@ def set_gpu_virtualization():
             toast.config(text=f"{vm_name}配置文件格式错误")
         except ValueError as ve:
             logging.error(f"{vm_name}配置文件错误: 值错误!")
-            toast.config(text=f"{vm_name}配置文件错误: {ve}")
+            toast.config(text=f"{vm_name}配置错误: {ve}")
         except Exception as e:
             logging.error(f"读取{vm_name}配置出错: {e}")
             toast.config(text=f"读取{vm_name}配置出错：未知错误!")
-    
-    # 判断是否拥有管理员权限
-    def is_admin():
-        try:
-            return ctypes.windll.shell32.IsUserAnAdmin()
-        except Exception:
-            return False
-    
-    # 获取管理员权限
-    def get_administrator_privileges():
-        confirm = messagebox.askyesno("确认", "您确定要以管理员权限重新运行吗？")
-        if confirm:
-            ctypes.windll.shell32.ShellExecuteW(None,"runas", sys.executable, __file__, None, 0)
-            exit()
-        else:
-            messagebox.showinfo("取消","你取消了管理员权限重启!\n可能会设置失败!")
-            GPU_window.destroy()
     
     GPU_window = tk.Toplevel(root)
     if is_admin():
@@ -427,10 +579,14 @@ def set_gpu_virtualization():
     toast = ttk.Label(title_frame, text="加载中......",style="i.TLabel")
     toast.grid(row=0,column=0,sticky="w")
 
-    admin_button = ttk.Button(title_frame, text="获取管理员权限", command=get_administrator_privileges,style="e.TButton")
+    toast_admin = ttk.Label(title_frame, text="如设置失败,请:",style="e.TLabel")
+    toast_admin.grid(row=0,column=1,sticky="e")
+
+    admin_button = ttk.Button(title_frame, text="获取管理员权限", command=lambda:get_administrator_privileges(win_name=GPU_window),style="e.TButton")
     admin_button.grid(row=0, column=2, sticky="e")
     if is_admin():
         admin_button.grid_remove()
+        toast_admin.grid_remove()
 
     # 其他控件使用相对布局
     ttk.Label(main_frame, text="GPU 分区路径：").grid(row=1, column=0, sticky="e", pady=5)
@@ -451,18 +607,12 @@ def set_gpu_virtualization():
     delete_button = ttk.Button(main_frame, text="删除 GPU 分区", command=delete)
     select_button = ttk.Button(main_frame, text="选择 GPU 分区", command=query_gpu_partitions)
     if gpu_status and "InstancePath" in gpu_status:
-        delete_button.grid(row=1, column=1, padx=5, sticky="e")
+        delete_button.grid(row=2, column=1, padx=5, sticky="e")
         select_button.grid_remove()
     else:
-        select_button.grid(row=1, column=1, padx=5, sticky="e")
+        select_button.grid(row=2, column=1, padx=5, sticky="e")
         delete_button.grid_remove()
     
-    # 添加GPU驱动路径选择
-    ttk.Label(main_frame, text="GPU 驱动路径：").grid(row=3, column=0, sticky="e", pady=5)
-    gpu_driver_var = tk.StringVar(value="")
-    ttk.Entry(main_frame, textvariable=gpu_driver_var, state='readonly').grid(row=3, column=1, sticky="ew", padx=5)
-    ttk.Button(main_frame, text="选择路径", command=select_gpu_driver_path).grid(row=3, column=1, sticky="e")
-
     # 内存映射空间设置移到row=5和6
     def validate_int_input(P):
         if P.isdigit() or P == "":
@@ -572,6 +722,9 @@ Remote_connection_button.grid(row=2, column=1, padx=5, pady=5, sticky="e")
 
 settings_button = ttk.Button(status_frame, text="Hyper-V管理器", command=lambda: run_in_thread(open_hyper_v_manager))
 settings_button.grid(row=3, column=1, padx=5, pady=5, sticky="e")
+
+settings_button = ttk.Button(status_frame, text="自动更新GPU驱动", command=lambda: run_in_thread(GUI_updata_driver))
+settings_button.grid(row=4, column=1, padx=5, pady=5, sticky="e")
 
 # 添加按钮
 save_button = ttk.Button(status_frame, text="打开日志文件夹", command=open_config_folder)
